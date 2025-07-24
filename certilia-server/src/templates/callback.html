@@ -173,6 +173,19 @@
             });
         }
         
+        // For web platform - send message to opener window
+        if (window.opener && window.opener !== window) {
+            const message = {
+                type: 'certilia_callback',
+                success: {{success}},
+                code: '{{code}}',
+                state: '{{state}}',
+                error: '{{error}}',
+                errorDescription: '{{errorDescription}}'
+            };
+            window.opener.postMessage(JSON.stringify(message), '*');
+        }
+        
         // For apps using deep links
         const deepLink = '{{deepLink}}';
         if (deepLink && deepLink !== 'null') {

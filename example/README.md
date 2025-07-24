@@ -126,6 +126,75 @@ Add to `android/app/src/main/AndroidManifest.xml`:
 ### Web
 For WebView support, ensure your server has proper CORS configuration.
 
+### 4. Universal Cross-Platform Flow (main_universal.dart) ⭐ BEST FOR PRODUCTION
+Uses platform-specific authentication methods automatically:
+- **Web**: Opens popup window
+- **iOS/Android**: Uses in-app WebView
+
+**Pros:**
+- Single codebase for all platforms
+- Automatic platform detection
+- Best user experience per platform
+- Production-ready
+
+**Usage:**
+```bash
+flutter run -t lib/main_universal.dart
+```
+
+## Testing
+
+### Unit Tests
+Run widget and unit tests:
+```bash
+flutter test
+```
+
+### Integration Tests
+
+#### Automated E2E Testing
+Use the test runner script:
+```bash
+cd integration_test
+./e2e_test_runner.sh
+
+# Or run specific platform tests:
+./e2e_test_runner.sh chrome    # Web tests
+./e2e_test_runner.sh ios       # iOS tests
+./e2e_test_runner.sh android   # Android tests
+./e2e_test_runner.sh all       # All platforms
+```
+
+#### Manual Integration Tests
+1. **Chrome/Web:**
+   ```bash
+   flutter drive \
+     --driver=test_driver/integration_test.dart \
+     --target=integration_test/oauth_flow_test.dart \
+     -d chrome
+   ```
+
+2. **iOS:**
+   ```bash
+   flutter test integration_test/oauth_flow_test.dart
+   ```
+
+3. **Android:**
+   ```bash
+   flutter test integration_test/oauth_flow_test.dart
+   ```
+
+### Test Coverage
+The tests cover:
+- Initial authentication state
+- Sign in button functionality
+- Loading states
+- Successful authentication flow
+- Error handling
+- Logout functionality
+- Token refresh
+- Platform-specific behavior
+
 ## Troubleshooting
 
 1. **"Server not responding" error:**
@@ -142,3 +211,8 @@ For WebView support, ensure your server has proper CORS configuration.
    - Verify client ID is correct
    - Check that redirect URLs match configuration
    - Ensure all required scopes are requested
+
+4. **Tests failing:**
+   - Ensure server is running before running integration tests
+   - Check that all dependencies are installed
+   - Verify device/emulator is properly configured
