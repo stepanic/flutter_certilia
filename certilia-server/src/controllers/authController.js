@@ -1,0 +1,298 @@
+import certiliaService from '../services/certiliaService.js';
+import tokenService from '../services/tokenService.js';
+import sessionService from '../services/sessionService.js';
+import { generateRandomString, generatePKCEChallenge, generateState, generateNonce } from '../utils/crypto.js';
+import logger from '../utils/logger.js';
+import { AuthenticationError, ValidationError } from '../utils/errors.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load callback template
+const callbackTemplate = readFileSync(
+  join(__dirname, '../templates/callback.html'),
+  'utf8'
+);
+
+/**
+ * Render callback template with data
+ */
+function renderCallbackTemplate(data) {
+  let html = callbackTemplate;
+  
+  // Replace all template variables
+  Object.keys(data).forEach(key => {
+    const value = data[key] === null ? '' : data[key];
+    html = html.replace(new RegExp(`{{${key}}}`, 'g'), value);
+  });
+  
+  // Handle conditional blocks
+  html = html.replace(/{{#if (\w+)}}([\s\S]*?){{\/if}}/g, (match, condition, content) => {
+    return data[condition] ? content : '';
+  });
+  
+  return html;
+}
+
+/**
+ * Initialize OAuth authorization flow
+ * Mobile app calls this to get authorization URL
+ */
+export const initializeAuth = async (req, res, next) => {
+  try {
+    const { redirect_uri, state: clientState } = req.query;
+
+    // Generate OAuth parameters
+    const state = clientState || generateState();
+    const nonce = generateNonce();
+    const codeVerifier = generateRandomString(128);
+    const codeChallenge = generatePKCEChallenge(codeVerifier);
+
+    // Create session to store OAuth parameters
+    const sessionId = sessionService.createSession({
+      state,
+      nonce,
+      codeVerifier,
+      redirectUri: redirect_uri,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Build authorization URL
+    const authorizationUrl = certiliaService.buildAuthorizationUrl({
+      state,
+      nonce,
+      codeChallenge,
+      redirectUri: redirect_uri,
+    });
+
+    logger.info('OAuth flow initialized', { sessionId });
+
+    res.json({
+      authorization_url: authorizationUrl,
+      session_id: sessionId,
+      state,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Handle OAuth callback from Certilia
+ * This is called by Certilia after user authentication
+ */
+export const handleCallback = async (req, res, next) => {
+  try {
+    const { code, state } = req.query;
+    const { error, error_description } = req.query;
+
+    // Check for OAuth errors
+    if (error) {
+      logger.warn('OAuth callback error', { error, error_description });
+      
+      const errorData = {
+        success: false,
+        title: 'Authentication Failed',
+        message: error_description || 'An error occurred during authentication.',
+        icon: '✕',
+        iconClass: 'error',
+        code: null,
+        state: state || '',
+        error: error,
+        errorDescription: error_description || '',
+        showCode: 'none',
+        showCodeContainer: false,
+        showButton: true,
+        buttonText: 'Try Again',
+        buttonLink: '/',
+        deepLink: null,
+      };
+      
+      return res.send(renderCallbackTemplate(errorData));
+    }
+
+    if (!code || !state) {
+      throw new ValidationError('Missing required parameters');
+    }
+
+    // Build response data
+    const templateData = {
+      success: true,
+      title: 'Authentication Successful',
+      message: 'You can close this window and return to the app.',
+      icon: '✓',
+      iconClass: 'success',
+      code: code || '',
+      state: state || '',
+      error: null,
+      errorDescription: null,
+      showCode: 'none', // Hide code in UI for security
+      showCodeContainer: false,
+      showButton: false,
+      deepLink: null, // Could be configured for specific apps
+    };
+
+    // For mobile apps, return an HTML page that can be parsed
+    res.send(renderCallbackTemplate(templateData));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Exchange authorization code for tokens
+ * Mobile app calls this after parsing the callback
+ */
+export const exchangeCode = async (req, res, next) => {
+  try {
+    const { code, state, session_id } = req.body;
+
+    // Retrieve session
+    const session = sessionService.getSession(session_id);
+    if (!session) {
+      throw new AuthenticationError('Invalid or expired session');
+    }
+
+    // Verify state
+    if (session.state !== state) {
+      throw new AuthenticationError('Invalid state parameter');
+    }
+
+    // Exchange code for tokens
+    const tokenResponse = await certiliaService.exchangeCodeForTokens({
+      code,
+      codeVerifier: session.codeVerifier,
+      redirectUri: session.redirectUri,
+    });
+
+    // Store the original tokens from Certilia
+    const certiliaTokens = {
+      access_token: tokenResponse.access_token,
+      refresh_token: tokenResponse.refresh_token,
+      id_token: tokenResponse.id_token,
+      expires_in: tokenResponse.expires_in,
+    };
+
+    // Get user info
+    const userInfo = await certiliaService.getUserInfo(tokenResponse.access_token);
+
+    // Merge ID token claims with user info if available
+    let idTokenClaims = {};
+    if (tokenResponse.id_token) {
+      try {
+        // Decode ID token (without verification for now - in production, verify signature)
+        const decoded = tokenService.decodeToken(tokenResponse.id_token);
+        
+        // Validate nonce if present
+        if (decoded.nonce && decoded.nonce !== session.nonce) {
+          throw new AuthenticationError('Invalid nonce in ID token');
+        }
+        
+        idTokenClaims = decoded;
+        logger.debug('ID token decoded successfully', { 
+          sub: decoded.sub,
+          nonce: decoded.nonce,
+          aud: decoded.aud,
+          iss: decoded.iss,
+        });
+      } catch (error) {
+        logger.warn('Failed to decode ID token', { error: error.message });
+      }
+    }
+
+    // Generate our own JWT tokens with complete user data
+    const completeUserInfo = {
+      ...userInfo,
+      ...idTokenClaims,
+      certilia_tokens: certiliaTokens, // Store original tokens for potential future use
+    };
+
+    const tokens = tokenService.generateTokenPair(completeUserInfo);
+
+    // Clean up session
+    sessionService.deleteSession(session_id);
+
+    logger.info('Code exchanged successfully', { userId: userInfo.sub });
+
+    res.json({
+      ...tokens,
+      user: {
+        sub: userInfo.sub,
+        firstName: userInfo.given_name,
+        lastName: userInfo.family_name,
+        oib: userInfo.oib,
+        email: userInfo.email,
+        dateOfBirth: userInfo.birthdate,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Refresh access token
+ */
+export const refreshToken = async (req, res, next) => {
+  try {
+    const { refresh_token } = req.body;
+
+    if (!refresh_token) {
+      throw new ValidationError('Refresh token is required');
+    }
+
+    // Verify and decode refresh token
+    const decoded = tokenService.verifyToken(refresh_token, 'refresh');
+
+    // In a real app, you might want to check if the user still exists
+    // and fetch fresh user data from database
+
+    // Generate new token pair
+    const tokens = tokenService.generateTokenPair({
+      sub: decoded.sub,
+    });
+
+    logger.info('Token refreshed', { userId: decoded.sub });
+
+    res.json(tokens);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get current user info from token
+ */
+export const getCurrentUser = async (req, res, next) => {
+  try {
+    // User info is attached by auth middleware
+    res.json({
+      user: req.user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Logout user
+ */
+export const logout = async (req, res, next) => {
+  try {
+    // In a real app, you might want to:
+    // - Invalidate the refresh token
+    // - Add the access token to a blacklist
+    // - Clear any server-side sessions
+
+    logger.info('User logged out', { userId: req.userId });
+
+    res.json({
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
