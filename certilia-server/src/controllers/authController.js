@@ -23,20 +23,54 @@ const callbackTemplate = readFileSync(
 function renderCallbackTemplate(data) {
   let html = callbackTemplate;
   
-  // Process conditional blocks from innermost to outermost
-  // to handle nested conditions properly
-  let maxIterations = 10; // Prevent infinite loops
-  let iteration = 0;
-  
-  while (html.includes('{{#if') && iteration < maxIterations) {
-    html = html.replace(/\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, condition, content) => {
-      // If content still has unopened {{/if}}, skip this match
-      if (content.includes('{{/if}}') && !content.includes('{{#if')) {
-        return match;
+  // Function to find matching endif for a given if position
+  function findMatchingEndIf(str, startPos) {
+    let depth = 1;
+    let pos = startPos;
+    
+    while (depth > 0 && pos < str.length) {
+      const nextIf = str.indexOf('{{#if', pos);
+      const nextEndIf = str.indexOf('{{/if}}', pos);
+      
+      if (nextEndIf === -1) return -1;
+      
+      if (nextIf !== -1 && nextIf < nextEndIf) {
+        depth++;
+        pos = nextIf + 5;
+      } else {
+        depth--;
+        if (depth === 0) return nextEndIf;
+        pos = nextEndIf + 7;
       }
-      return data[condition] ? content : '';
-    });
-    iteration++;
+    }
+    
+    return -1;
+  }
+  
+  // Process conditionals from outside to inside
+  let processed = true;
+  while (processed) {
+    processed = false;
+    
+    const match = html.match(/\{\{#if\s+(\w+)\}\}/);
+    if (match) {
+      const startPos = match.index;
+      const condition = match[1];
+      const endIfPos = findMatchingEndIf(html, startPos + match[0].length);
+      
+      if (endIfPos !== -1) {
+        const beforeIf = html.substring(0, startPos);
+        const content = html.substring(startPos + match[0].length, endIfPos);
+        const afterIf = html.substring(endIfPos + 7);
+        
+        if (data[condition]) {
+          html = beforeIf + content + afterIf;
+        } else {
+          html = beforeIf + afterIf;
+        }
+        processed = true;
+      }
+    }
   }
   
   // Replace all template variables
@@ -143,6 +177,8 @@ export const handleCallback = async (req, res, next) => {
       showCode: 'none', // Hide code in UI for security
       showCodeContainer: false,
       showButton: false,
+      buttonText: '',
+      buttonLink: '/',
       deepLink: null, // Could be configured for specific apps
     };
 

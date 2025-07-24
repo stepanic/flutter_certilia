@@ -191,8 +191,8 @@ if [ ! -z "$CALLBACK_URL" ]; then
         echo "$USER_RESPONSE" | jq '.' 2>/dev/null || echo "$USER_RESPONSE"
         
         # Save token for future use
-        echo -e "\n${GREEN}💾 Access token saved to token.txt${NC}"
-        echo "$ACCESS_TOKEN" > token.txt
+        echo -e "\n${GREEN}💾 Access token ${NC}"
+        echo "$ACCESS_TOKEN"
     fi
     
     echo -e "\n${GREEN}🎉 OAuth flow completed successfully!${NC}"
