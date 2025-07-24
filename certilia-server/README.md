@@ -69,6 +69,19 @@ When registering your application on https://developer.test.certilia.com/service
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
+## Quick Start for Development
+
+For local development with ngrok, see:
+- [DEVELOPMENT.md](./DEVELOPMENT.md) - Complete development setup guide
+- [CERTILIA_OAUTH_SETUP.md](./CERTILIA_OAUTH_SETUP.md) - Step-by-step Certilia Dashboard guide
+
+Quick start:
+```bash
+./dev-start.sh
+# In another terminal:
+ngrok http --url=uniformly-credible-opossum.ngrok-free.app 3000
+```
+
 ## Installation
 
 1. Clone the repository
