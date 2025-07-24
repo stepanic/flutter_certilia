@@ -175,7 +175,8 @@ class CertiliaWebClient {
         _log('Message origin: ${event.origin}');
         
         // Check if message is from our server
-        if (serverUrl != null && !event.origin.startsWith(serverUrl)) {
+        final server = serverUrl;
+        if (server != null && !event.origin.startsWith(server)) {
           _log('Ignoring message from untrusted origin: ${event.origin}');
           return;
         }
