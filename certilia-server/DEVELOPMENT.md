@@ -234,3 +234,11 @@ Even in development:
 3. Test error scenarios
 4. Monitor logs for issues
 5. Prepare for production deployment
+
+## Environment Notes
+
+The server is configured to use Certilia TEST environment by default:
+- Base URL: `https://idp.test.certilia.com`
+- All endpoints use `/oauth2/` prefix (not `/oauth/`)
+
+For production, update the BASE_URL to `https://idp.certilia.com`

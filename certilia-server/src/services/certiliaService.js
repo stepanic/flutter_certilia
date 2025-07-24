@@ -221,7 +221,7 @@ class CertiliaService {
       });
 
       await this.client.post(
-        '/oauth/revoke',
+        '/oauth2/revoke',
         params.toString(),
         {
           headers: {

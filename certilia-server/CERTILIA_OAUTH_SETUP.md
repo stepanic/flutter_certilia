@@ -6,6 +6,8 @@ This guide shows exactly how to fill out the OAuth2 application form on Certilia
 
 Go to: https://developer.test.certilia.com/services/idp/create
 
+**Note**: This guide is for the TEST environment (idp.test.certilia.com). For production, use the production dashboard and endpoints.
+
 ## Step 2: Fill Out the Form
 
 ### Section 1: Basic Information
