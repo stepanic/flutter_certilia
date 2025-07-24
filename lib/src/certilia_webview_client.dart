@@ -54,6 +54,11 @@ class CertiliaWebViewClient {
       final authData = await _initializeOAuthFlow();
       
       // Show WebView for authentication
+      if (!context.mounted) {
+        throw const CertiliaAuthenticationException(
+          message: 'Context no longer mounted',
+        );
+      }
       final code = await _showAuthWebView(
         context,
         authData['authorization_url'],
@@ -115,7 +120,7 @@ class CertiliaWebViewClient {
     }
 
     final response = await _httpClient.get(
-      Uri.parse('$serverUrl/api/auth/initialize?redirect_uri=$serverUrl/api/auth/callback'),
+      Uri.parse('$serverUrl/api/auth/initialize?response_type=code&redirect_uri=$serverUrl/api/auth/callback'),
     );
 
     if (response.statusCode != 200) {
@@ -380,6 +385,9 @@ class CertiliaWebViewClient {
     _httpClient.close();
   }
 }
+
+/// Alias for platform client
+typedef CertiliaPlatformClient = CertiliaWebViewClient;
 
 /// WebView screen for OAuth authentication
 class _CertiliaWebViewScreen extends StatefulWidget {

@@ -1,7 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'certilia_webview_client.dart' if (dart.library.html) 'certilia_web_client.dart';
+import 'certilia_client_stub.dart'
+    if (dart.library.io) 'certilia_webview_client.dart'
+    if (dart.library.html) 'certilia_web_client.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_user.dart';
 
@@ -15,19 +16,10 @@ class CertiliaUniversalClient {
     required CertiliaConfig config,
     String? serverUrl,
   }) {
-    if (kIsWeb) {
-      // Use web client for web platform
-      _platformClient = CertiliaWebClient(
-        config: config,
-        serverUrl: serverUrl,
-      );
-    } else {
-      // Use WebView client for mobile platforms
-      _platformClient = CertiliaWebViewClient(
-        config: config,
-        serverUrl: serverUrl,
-      );
-    }
+    _platformClient = CertiliaPlatformClient(
+      config: config,
+      serverUrl: serverUrl,
+    );
   }
 
   /// Authenticates the user and returns their profile

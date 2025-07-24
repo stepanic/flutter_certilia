@@ -69,6 +69,8 @@ class CertiliaClient {
         ),
       );
 
+      // AppAuth can return null if cancelled
+      // ignore: unnecessary_null_comparison
       if (result == null) {
         throw const CertiliaAuthenticationException(
           message: 'Authentication was cancelled or failed',
@@ -173,6 +175,8 @@ class CertiliaClient {
         ),
       );
 
+      // AppAuth can return null
+      // ignore: unnecessary_null_comparison
       if (result == null) {
         throw const CertiliaAuthenticationException(
           message: 'Token refresh failed',

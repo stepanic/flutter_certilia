@@ -27,6 +27,11 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or Postman)
     if (!origin) return callback(null, true);
     
+    // In development, allow all localhost origins
+    if (config.isDevelopment && origin.includes('localhost')) {
+      return callback(null, true);
+    }
+    
     if (config.cors.origins.includes(origin)) {
       callback(null, true);
     } else {

@@ -11,10 +11,10 @@ class MockCertiliaService {
     sub: '59386932137',
     firstName: 'Test',
     lastName: 'User',
-    fullName: 'Test User',
     email: 'test@example.com',
     oib: '69435151530',
     dateOfBirth: DateTime(1990, 12, 19),
+    raw: const {},
   );
 
   /// Simulate authentication flow

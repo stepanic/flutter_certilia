@@ -171,7 +171,7 @@ class _HomePageState extends State<HomePage> {
               _platformInfo,
               style: const TextStyle(fontSize: 12),
             ),
-            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
           ),
           const SizedBox(width: 8),
         ],

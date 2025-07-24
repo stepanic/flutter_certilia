@@ -1,6 +1,8 @@
+// ignore_for_file: avoid_web_libraries_in_flutter
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
+// ignore: deprecated_member_use
 import 'dart:html' as html;
 
 import 'package:flutter/foundation.dart';
@@ -115,7 +117,7 @@ class CertiliaWebClient {
     }
 
     final response = await _httpClient.get(
-      Uri.parse('$serverUrl/api/auth/initialize?redirect_uri=$serverUrl/api/auth/callback'),
+      Uri.parse('$serverUrl/api/auth/initialize?response_type=code&redirect_uri=$serverUrl/api/auth/callback'),
     );
 
     if (response.statusCode != 200) {
@@ -146,6 +148,8 @@ class CertiliaWebClient {
       'width=$width,height=$height,left=$left,top=$top',
     );
     
+    // Check if popup was blocked
+    // ignore: unnecessary_null_comparison
     if (popup == null) {
       throw const CertiliaAuthenticationException(
         message: 'Failed to open authentication popup. Please check popup blocker settings.',
@@ -435,3 +439,6 @@ class CertiliaWebClient {
     _httpClient.close();
   }
 }
+
+/// Alias for platform client
+typedef CertiliaPlatformClient = CertiliaWebClient;

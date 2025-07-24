@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_certilia_example/main_universal.dart' as app;
@@ -40,7 +41,7 @@ void main() {
       expect(find.byKey(const Key('loading_indicator')), findsOneWidget);
       
       // Button should be disabled during loading
-      final button = tester.widget<ElevatedButton>(signInButton);
+      final button = tester.widget(signInButton) as ElevatedButton;
       expect(button.onPressed, isNull);
     });
 
