@@ -23,15 +23,26 @@ const callbackTemplate = readFileSync(
 function renderCallbackTemplate(data) {
   let html = callbackTemplate;
   
+  // Process conditional blocks from innermost to outermost
+  // to handle nested conditions properly
+  let maxIterations = 10; // Prevent infinite loops
+  let iteration = 0;
+  
+  while (html.includes('{{#if') && iteration < maxIterations) {
+    html = html.replace(/\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, condition, content) => {
+      // If content still has unopened {{/if}}, skip this match
+      if (content.includes('{{/if}}') && !content.includes('{{#if')) {
+        return match;
+      }
+      return data[condition] ? content : '';
+    });
+    iteration++;
+  }
+  
   // Replace all template variables
   Object.keys(data).forEach(key => {
     const value = data[key] === null ? '' : data[key];
-    html = html.replace(new RegExp(`{{${key}}}`, 'g'), value);
-  });
-  
-  // Handle conditional blocks
-  html = html.replace(/{{#if (\w+)}}([\s\S]*?){{\/if}}/g, (match, condition, content) => {
-    return data[condition] ? content : '';
+    html = html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
   });
   
   return html;
