@@ -10,6 +10,17 @@ export function generateRandomString(length = 32) {
 }
 
 /**
+ * Generate PKCE verifier compliant with RFC 7636
+ * @returns {string} Code verifier (43-128 characters, unreserved characters only)
+ */
+export function generatePKCEVerifier() {
+  // RFC 7636 requires 43-128 characters using unreserved characters: [A-Z, a-z, 0-9, -, ., _, ~]
+  // Generate 96 random bytes which will produce exactly 128 base64url characters
+  const verifier = crypto.randomBytes(96).toString('base64url');
+  return verifier;
+}
+
+/**
  * Generate PKCE challenge from verifier
  * @param {string} verifier - PKCE verifier
  * @returns {string} Base64url encoded challenge

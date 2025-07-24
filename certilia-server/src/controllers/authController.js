@@ -1,7 +1,7 @@
 import certiliaService from '../services/certiliaService.js';
 import tokenService from '../services/tokenService.js';
 import sessionService from '../services/sessionService.js';
-import { generateRandomString, generatePKCEChallenge, generateState, generateNonce } from '../utils/crypto.js';
+import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, generateState, generateNonce } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
 import { AuthenticationError, ValidationError } from '../utils/errors.js';
 import { readFileSync } from 'fs';
@@ -48,7 +48,7 @@ export const initializeAuth = async (req, res, next) => {
     // Generate OAuth parameters
     const state = clientState || generateState();
     const nonce = generateNonce();
-    const codeVerifier = generateRandomString(128);
+    const codeVerifier = generatePKCEVerifier();
     const codeChallenge = generatePKCEChallenge(codeVerifier);
 
     // Create session to store OAuth parameters

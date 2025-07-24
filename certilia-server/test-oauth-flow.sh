@@ -29,7 +29,7 @@ echo "$HEALTH_RESPONSE" | jq '.'
 
 # Initialize OAuth flow
 echo -e "\n${YELLOW}2. Initializing OAuth flow...${NC}"
-INIT_RESPONSE=$(curl -s "$API_URL/auth/initialize?redirect_uri=$BASE_URL/api/auth/callback")
+INIT_RESPONSE=$(curl -s "$API_URL/auth/initialize?response_type=code&redirect_uri=$BASE_URL/api/auth/callback")
 
 if [ -z "$INIT_RESPONSE" ]; then
     echo -e "${RED}❌ Failed to initialize OAuth flow${NC}"
@@ -110,3 +110,90 @@ EOF
 chmod +x test-exchange.sh
 
 echo -e "\n${GREEN}✅ Created test-exchange.sh for completing the flow${NC}"
+
+# Wait for callback URL
+echo -e "\n${YELLOW}⏳ Waiting for callback URL...${NC}"
+echo "After you authenticate, paste the ENTIRE callback URL here:"
+read -p "> " CALLBACK_URL
+
+if [ ! -z "$CALLBACK_URL" ]; then
+    echo -e "\n${YELLOW}🔄 Processing callback URL...${NC}"
+    
+    # Parse URL parameters
+    QUERY_STRING=$(echo "$CALLBACK_URL" | cut -d'?' -f2)
+    
+    # Parse individual parameters
+    CALLBACK_CODE=""
+    CALLBACK_STATE=""
+    
+    # Parse each parameter
+    IFS='&' read -ra PARAMS <<< "$QUERY_STRING"
+    for param in "${PARAMS[@]}"; do
+        KEY=$(echo "$param" | cut -d'=' -f1)
+        VALUE=$(echo "$param" | cut -d'=' -f2)
+        
+        case "$KEY" in
+            "code")
+                CALLBACK_CODE="$VALUE"
+                ;;
+            "state")
+                CALLBACK_STATE="$VALUE"
+                ;;
+        esac
+    done
+    
+    # Verify state matches
+    if [ "$CALLBACK_STATE" != "$STATE" ]; then
+        echo -e "${RED}❌ State mismatch!${NC}"
+        echo "Expected: $STATE"
+        echo "Received: $CALLBACK_STATE"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✅ State verified!${NC}"
+    echo "Code: $CALLBACK_CODE"
+    
+    # Exchange code for tokens
+    echo -e "\n${YELLOW}🔄 Exchanging code for tokens...${NC}"
+    
+    EXCHANGE_RESPONSE=$(curl -s -X POST "$API_URL/auth/exchange" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"code\": \"$CALLBACK_CODE\",
+        \"state\": \"$CALLBACK_STATE\",
+        \"session_id\": \"$SESSION_ID\"
+      }")
+    
+    if [ -z "$EXCHANGE_RESPONSE" ]; then
+        echo -e "${RED}❌ Failed to exchange code${NC}"
+        exit 1
+    fi
+    
+    # Check if response contains error
+    if echo "$EXCHANGE_RESPONSE" | grep -q "error"; then
+        echo -e "${RED}❌ Error in response:${NC}"
+        echo "$EXCHANGE_RESPONSE" | jq '.' 2>/dev/null || echo "$EXCHANGE_RESPONSE"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✅ Tokens received successfully!${NC}"
+    echo "$EXCHANGE_RESPONSE" | jq '.' 2>/dev/null || echo "$EXCHANGE_RESPONSE"
+    
+    # Extract access token
+    ACCESS_TOKEN=$(echo "$EXCHANGE_RESPONSE" | jq -r '.accessToken' 2>/dev/null)
+    
+    if [ "$ACCESS_TOKEN" != "null" ] && [ ! -z "$ACCESS_TOKEN" ]; then
+        echo -e "\n${YELLOW}📤 Testing authenticated endpoint...${NC}"
+        USER_RESPONSE=$(curl -s "$API_URL/auth/user" \
+          -H "Authorization: Bearer $ACCESS_TOKEN")
+        
+        echo -e "${GREEN}✅ User info retrieved:${NC}"
+        echo "$USER_RESPONSE" | jq '.' 2>/dev/null || echo "$USER_RESPONSE"
+        
+        # Save token for future use
+        echo -e "\n${GREEN}💾 Access token saved to token.txt${NC}"
+        echo "$ACCESS_TOKEN" > token.txt
+    fi
+    
+    echo -e "\n${GREEN}🎉 OAuth flow completed successfully!${NC}"
+fi

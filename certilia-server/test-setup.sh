@@ -36,7 +36,7 @@ fi
 
 # Test OAuth initialization
 echo -e "\n${YELLOW}3. Testing OAuth initialization...${NC}"
-INIT=$(curl -s "https://uniformly-credible-opossum.ngrok-free.app/api/auth/initialize?redirect_uri=https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback")
+INIT=$(curl -s "https://uniformly-credible-opossum.ngrok-free.app/api/auth/initialize?response_type=code&redirect_uri=https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback")
 
 if [ $? -eq 0 ] && [[ $INIT == *"authorization_url"* ]]; then
     echo -e "${GREEN}✅ OAuth initialization working!${NC}"
