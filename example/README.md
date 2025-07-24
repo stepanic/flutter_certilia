@@ -1,57 +1,144 @@
-# flutter_certilia_example
+# Flutter Certilia Example Apps
 
-Example application demonstrating the usage of flutter_certilia package.
+This directory contains example applications demonstrating different ways to integrate Certilia authentication in your Flutter app.
 
-## Getting Started
+## Available Examples
 
-1. Replace `your_client_id_here` in `lib/main.dart` with your actual Certilia client ID
-2. Update the redirect URL to match your app's configuration
-3. Configure platform-specific settings as described below
+### 1. Direct OAuth Flow (main.dart)
+Uses `flutter_appauth` to perform OAuth authentication directly with Certilia. This opens an external browser for authentication.
 
-## Platform Configuration
+**Pros:**
+- Simple implementation
+- Direct connection to Certilia
+- No middleware server required
+
+**Cons:**
+- Opens external browser (not in-app)
+- Limited control over authentication UI
+- May not work on all platforms (e.g., web)
+
+### 2. Server Middleware Flow (main_server.dart)
+Uses a Node.js server as middleware between the Flutter app and Certilia API. Still opens external browser but through server-managed flow.
+
+**Pros:**
+- Server handles OAuth complexity
+- Can add custom business logic
+- Better security (client secret on server)
+
+**Cons:**
+- Requires running server
+- Still opens external browser
+- More complex setup
+
+### 3. WebView In-App Flow (main_webview.dart) ⭐ RECOMMENDED
+Uses WebView to perform authentication entirely within the app, providing the best user experience.
+
+**Pros:**
+- Authentication happens in-app
+- Full control over UI/UX
+- Works on all platforms
+- Better user experience
+- No app switching
+
+**Cons:**
+- Requires server middleware
+- Slightly more complex implementation
+
+## Running the Examples
+
+### Prerequisites
+
+1. **For all examples:**
+   ```bash
+   flutter pub get
+   ```
+
+2. **For server-based examples (main_server.dart, main_webview.dart):**
+   - Start the Certilia server:
+     ```bash
+     cd ../certilia-server
+     ./dev-start.sh
+     ```
+   - Ensure ngrok is running with the correct domain
+
+### Running Different Examples
+
+1. **Direct OAuth Flow:**
+   ```bash
+   flutter run -t lib/main.dart
+   ```
+
+2. **Server Middleware Flow:**
+   ```bash
+   flutter run -t lib/main_server.dart
+   ```
+
+3. **WebView In-App Flow:**
+   ```bash
+   flutter run -t lib/main_webview.dart
+   ```
+
+## Configuration
+
+### Direct OAuth (main.dart)
+```dart
+const config = CertiliaConfig(
+  clientId: 'your_client_id_here',
+  redirectUrl: 'com.example.certilia://callback',
+  scopes: ['openid', 'profile', 'eid'],
+);
+```
+
+### Server-based (main_server.dart, main_webview.dart)
+```dart
+// Update server URL to match your setup
+static const String serverUrl = 'https://uniformly-credible-opossum.ngrok-free.app';
+static const String clientId = 'your_client_id';
+```
+
+## Platform-specific Setup
 
 ### iOS
-
-Add the following to `ios/Runner/Info.plist`:
-
+Add to `ios/Runner/Info.plist`:
 ```xml
 <key>CFBundleURLTypes</key>
 <array>
-    <dict>
-        <key>CFBundleURLSchemes</key>
-        <array>
-            <string>com.example.certilia</string>
-        </array>
-    </dict>
+  <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>com.example.certilia</string>
+    </array>
+  </dict>
 </array>
 ```
 
 ### Android
-
-Add the following to `android/app/build.gradle`:
-
-```gradle
-android {
-    defaultConfig {
-        manifestPlaceholders += [
-            'appAuthRedirectScheme': 'com.example.certilia'
-        ]
-    }
-}
+Add to `android/app/src/main/AndroidManifest.xml`:
+```xml
+<intent-filter>
+  <action android:name="android.intent.action.VIEW" />
+  <category android:name="android.intent.category.DEFAULT" />
+  <category android:name="android.intent.category.BROWSABLE" />
+  <data android:scheme="com.example.certilia" />
+</intent-filter>
 ```
 
-## Running the Example
+### Web
+For WebView support, ensure your server has proper CORS configuration.
 
-```bash
-flutter pub get
-flutter run
-```
+## Troubleshooting
 
-## Features Demonstrated
+1. **"Server not responding" error:**
+   - Check that certilia-server is running
+   - Verify ngrok is running with correct domain
+   - Check server URL in the example code
 
-- OAuth 2.0 authentication flow
-- Displaying user information
-- Logout functionality
-- End session functionality
-- Error handling
-- Loading states
+2. **WebView not loading:**
+   - Ensure you have internet permission on Android
+   - Check that JavaScript is enabled in WebView
+   - Verify server SSL certificate is valid
+
+3. **Authentication fails:**
+   - Verify client ID is correct
+   - Check that redirect URLs match configuration
+   - Ensure all required scopes are requested
