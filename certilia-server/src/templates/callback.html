@@ -162,6 +162,14 @@
     </div>
     
     <script>
+        // Debug logging
+        console.log('Callback page loaded');
+        console.log('Success:', {{success}});
+        console.log('Code:', '{{code}}');
+        console.log('State:', '{{state}}');
+        console.log('Error:', '{{error}}');
+        console.log('Window opener:', window.opener);
+        
         // For mobile apps that use JavaScript interface
         if (window.OAuthCallback) {
             window.OAuthCallback.onComplete({
@@ -183,7 +191,21 @@
                 error: '{{error}}',
                 errorDescription: '{{errorDescription}}'
             };
-            window.opener.postMessage(JSON.stringify(message), '*');
+            
+            // Small delay to ensure message is processed
+            setTimeout(() => {
+                try {
+                    window.opener.postMessage(JSON.stringify(message), '*');
+                    console.log('Message sent to opener:', message);
+                    
+                    // Auto-close popup after sending message
+                    setTimeout(() => {
+                        window.close();
+                    }, 100);
+                } catch (e) {
+                    console.error('Failed to send message to opener:', e);
+                }
+            }, 100);
         }
         
         // For apps using deep links

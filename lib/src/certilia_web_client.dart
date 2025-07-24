@@ -141,6 +141,9 @@ class CertiliaWebClient {
     final left = (html.window.screen!.width! - width) ~/ 2;
     final top = (html.window.screen!.height! - height) ~/ 2;
     
+    _log('Opening authentication popup...');
+    _log('Authorization URL: $authorizationUrl');
+    
     // Open popup window
     final popup = html.window.open(
       authorizationUrl,
@@ -168,23 +171,37 @@ class CertiliaWebClient {
     // Listen for postMessage from callback page
     messageSubscription = html.window.onMessage.listen((event) {
       try {
+        _log('Received message from popup: ${event.data}');
+        _log('Message origin: ${event.origin}');
+        
+        // Check if message is from our server
+        if (serverUrl != null && !event.origin.startsWith(serverUrl)) {
+          _log('Ignoring message from untrusted origin: ${event.origin}');
+          return;
+        }
+        
         // Parse message data
         final data = event.data;
         if (data is String) {
           final parsed = jsonDecode(data);
           if (parsed['type'] == 'certilia_callback') {
+            _log('Processing certilia_callback message');
             final code = parsed['code'];
             final state = parsed['state'];
             final error = parsed['error'];
             
-            if (error != null) {
+            if (error != null && error != '') {
+              _log('Authentication error: $error');
               cleanup();
               completer.complete(null);
               popup.close();
-            } else if (code != null && state == expectedState) {
+            } else if (code != null && code != '' && state == expectedState) {
+              _log('Authentication successful, code received: $code');
               cleanup();
               completer.complete(code);
               popup.close();
+            } else {
+              _log('Invalid callback data - code: $code, state: $state (expected: $expectedState)');
             }
           }
         }
