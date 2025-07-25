@@ -91,20 +91,18 @@ ngrok http --url=uniformly-credible-opossum.ngrok-free.app 3000
 cp .env.example .env
 ```
 
-3. Update `.env` with your Certilia credentials:
+3. Configure your environment:
 
-```env
-# Certilia OAuth Configuration
-CERTILIA_CLIENT_ID=your_client_id_from_certilia
-CERTILIA_CLIENT_SECRET=your_client_secret_from_certilia
-CERTILIA_REDIRECT_URI=http://localhost:3000/api/auth/callback
+For **test environment**:
+```bash
+cp .env.example.test .env
+```
 
-# Security - Generate strong secrets for production!
-JWT_SECRET=generate-a-strong-secret-here
-SESSION_SECRET=generate-another-strong-secret-here
-
-# CORS - Add your Flutter app URLs
-ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
+For **production environment**:
+```bash
+cp .env.example.production .env
+# Update CERTILIA_REDIRECT_URI and CORS_ORIGIN with your production domain
+# Generate secure secrets for SESSION_SECRET
 ```
 
 4. Install dependencies:
