@@ -237,7 +237,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
-                    '✓ Authentication happens in-app',
+                    'Authentication happens in-app',
                     style: TextStyle(
                       color: Colors.blue,
                       fontSize: 12,

@@ -267,8 +267,8 @@ class _HomePageState extends State<HomePage> {
                         const SizedBox(height: 4),
                         Text(
                           kIsWeb
-                              ? '✓ Authentication opens in popup window'
-                              : '✓ Authentication happens in-app',
+                              ? 'Authentication opens in popup window'
+                              : 'Authentication happens in-app',
                           style: const TextStyle(
                             color: Colors.blue,
                             fontSize: 12,

@@ -20,9 +20,9 @@ void main() {
       
       // Verify platform-specific message
       if (kIsWeb) {
-        expect(find.text('✓ Authentication opens in popup window'), findsOneWidget);
+        expect(find.text('Authentication opens in popup window'), findsOneWidget);
       } else {
-        expect(find.text('✓ Authentication happens in-app'), findsOneWidget);
+        expect(find.text('Authentication happens in-app'), findsOneWidget);
       }
     });
 
