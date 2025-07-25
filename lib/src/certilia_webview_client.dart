@@ -121,6 +121,9 @@ class CertiliaWebViewClient {
 
     final response = await _httpClient.get(
       Uri.parse('$serverUrl/api/auth/initialize?response_type=code&redirect_uri=$serverUrl/api/auth/callback'),
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
     );
 
     if (response.statusCode != 200) {
@@ -152,7 +155,7 @@ class CertiliaWebViewClient {
     );
   }
 
-  /// Exchange authorization code for tokens
+  /// Exchange authorization code for tokens with retry logic
   Future<Map<String, dynamic>> _exchangeCodeForTokens({
     required String code,
     required String state,
@@ -164,15 +167,57 @@ class CertiliaWebViewClient {
       );
     }
 
-    final response = await _httpClient.post(
-      Uri.parse('$serverUrl/api/auth/exchange'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'code': code,
-        'state': state,
-        'session_id': sessionId,
-      }),
-    );
+    // Retry logic for flaky network connections
+    int retries = 3;
+    http.Response? response;
+    Exception? lastError;
+    
+    for (int i = 0; i < retries; i++) {
+      try {
+        _log('Token exchange attempt ${i + 1} of $retries');
+        
+        response = await _httpClient.post(
+          Uri.parse('$serverUrl/api/auth/exchange'),
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+          body: jsonEncode({
+            'code': code,
+            'state': state,
+            'session_id': sessionId,
+          }),
+        ).timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            throw CertiliaNetworkException(
+              message: 'Token exchange timed out',
+              statusCode: 408,
+              details: 'Request timed out after 30 seconds',
+            );
+          },
+        );
+        
+        // If we got a response, break out of retry loop
+        break;
+      } catch (e) {
+        lastError = e as Exception;
+        _log('Token exchange attempt ${i + 1} failed: $e');
+        
+        // If this isn't the last retry, wait before trying again
+        if (i < retries - 1) {
+          await Future.delayed(Duration(seconds: i + 1));
+        }
+      }
+    }
+    
+    if (response == null) {
+      throw lastError ?? CertiliaNetworkException(
+        message: 'Failed to exchange code for tokens after $retries attempts',
+        statusCode: 0,
+        details: 'All retry attempts failed',
+      );
+    }
 
     if (response.statusCode != 200) {
       throw CertiliaNetworkException(

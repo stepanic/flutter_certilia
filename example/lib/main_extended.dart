@@ -67,6 +67,8 @@ class _HomePageState extends State<HomePage> {
     if (_certilia.isAuthenticated) {
       try {
         final user = await _certilia.getCurrentUser();
+        if (!mounted) return;
+        
         setState(() {
           _user = user;
         });
@@ -88,6 +90,8 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final user = await _certilia.authenticate(context);
+      if (!mounted) return;
+      
       setState(() {
         _user = user;
         _isLoading = false;
@@ -96,16 +100,19 @@ class _HomePageState extends State<HomePage> {
       // Get extended info after successful authentication
       await _getExtendedInfo();
     } on CertiliaAuthenticationException catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Authentication failed: ${e.message}';
         _isLoading = false;
       });
     } on CertiliaNetworkException catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Network error: ${e.message}';
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Unexpected error: $e';
         _isLoading = false;
@@ -114,18 +121,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _getExtendedInfo() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
       final extendedInfo = await _certilia.getExtendedUserInfo();
+      if (!mounted) return;
+      
       setState(() {
         _extendedInfo = extendedInfo;
         _tokenExpiryTime = extendedInfo?.tokenExpiry;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Failed to get extended info: $e';
         _isLoading = false;
@@ -170,19 +182,25 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _logout() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
       await _certilia.logout();
+      if (!mounted) return;
+      
       setState(() {
         _user = null;
         _extendedInfo = null;
         _isLoading = false;
         _error = null;
+        _tokenExpiryTime = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Logout failed: $e';
         _isLoading = false;
