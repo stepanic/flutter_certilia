@@ -365,39 +365,59 @@ class CertiliaWebViewClient {
     try {
       _log('Refreshing token');
 
-      final response = await _httpClient.post(
-        Uri.parse('$serverUrl/api/auth/refresh'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${_currentToken!.refreshToken}',
-        },
-      );
-
-      if (response.statusCode != 200) {
-        throw CertiliaNetworkException(
-          message: 'Token refresh failed',
-          statusCode: response.statusCode,
-          details: response.body,
+      // Create a fresh HTTP client for this request
+      final client = http.Client();
+      try {
+        final response = await client.post(
+          Uri.parse('$serverUrl/api/auth/refresh'),
+          headers: {
+            'Content-Type': 'application/json',
+            // Include current access token so server can extract certilia tokens
+            'Authorization': 'Bearer ${_currentToken!.accessToken}',
+            'ngrok-skip-browser-warning': 'true',
+          },
+          body: jsonEncode({
+            'refresh_token': _currentToken!.refreshToken,
+          }),
+        ).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            throw CertiliaNetworkException(
+              message: 'Token refresh timed out',
+              statusCode: 408,
+              details: 'Request timed out after 10 seconds',
+            );
+          },
         );
+
+        if (response.statusCode != 200) {
+          throw CertiliaNetworkException(
+            message: 'Token refresh failed',
+            statusCode: response.statusCode,
+            details: response.body,
+          );
+        }
+
+        final tokenData = jsonDecode(response.body);
+
+        // Update token
+        _currentToken = CertiliaToken(
+          accessToken: tokenData['accessToken'],
+          refreshToken: tokenData['refreshToken'] ?? _currentToken!.refreshToken,
+          idToken: tokenData['idToken'],
+          expiresAt: tokenData['expiresIn'] != null
+              ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
+              : null,
+          tokenType: tokenData['tokenType'] ?? CertiliaConstants.defaultTokenType,
+        );
+
+        // Save updated token
+        await _saveToken(_currentToken!);
+
+        _log('Token refreshed successfully');
+      } finally {
+        client.close();
       }
-
-      final tokenData = jsonDecode(response.body);
-
-      // Update token
-      _currentToken = CertiliaToken(
-        accessToken: tokenData['accessToken'],
-        refreshToken: tokenData['refreshToken'] ?? _currentToken!.refreshToken,
-        idToken: tokenData['idToken'],
-        expiresAt: tokenData['expiresIn'] != null
-            ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
-            : null,
-        tokenType: tokenData['tokenType'] ?? CertiliaConstants.defaultTokenType,
-      );
-
-      // Save updated token
-      await _saveToken(_currentToken!);
-
-      _log('Token refreshed successfully');
     } catch (e) {
       _log('Token refresh failed: $e');
       if (e is CertiliaException) {
@@ -453,13 +473,16 @@ class CertiliaWebViewClient {
 
       _log('Fetching extended user info');
 
-      final response = await _httpClient.get(
-        Uri.parse('$serverUrl/api/user/extended-info'),
-        headers: {
-          'Authorization': 'Bearer ${_currentToken!.accessToken}',
-          'ngrok-skip-browser-warning': 'true',
-        },
-      );
+      // Create a fresh HTTP client for this request
+      final client = http.Client();
+      try {
+        final response = await client.get(
+          Uri.parse('$serverUrl/api/user/extended-info'),
+          headers: {
+            'Authorization': 'Bearer ${_currentToken!.accessToken}',
+            'ngrok-skip-browser-warning': 'true',
+          },
+        );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -497,6 +520,9 @@ class CertiliaWebViewClient {
           statusCode: response.statusCode,
           details: response.body,
         );
+      }
+      } finally {
+        client.close();
       }
     } catch (e) {
       _log('Error fetching extended user info: $e');
