@@ -30,6 +30,11 @@ class CertiliaUniversalClient {
 
   /// Checks if the user is currently authenticated
   bool get isAuthenticated => _platformClient.isAuthenticated;
+  
+  /// Checks authentication status including loading from storage
+  Future<bool> checkAuthenticationStatus() async {
+    return await _platformClient.checkAuthenticationStatus();
+  }
 
   /// Gets the current authenticated user
   Future<CertiliaUser?> getCurrentUser() async {

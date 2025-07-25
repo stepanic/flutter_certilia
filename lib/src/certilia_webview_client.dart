@@ -317,6 +317,14 @@ class CertiliaWebViewClient {
   bool get isAuthenticated {
     return _currentToken != null && !_currentToken!.isExpired;
   }
+  
+  /// Checks authentication status including loading from storage
+  Future<bool> checkAuthenticationStatus() async {
+    if (_currentToken == null) {
+      await _loadToken();
+    }
+    return isAuthenticated;
+  }
 
   /// Gets the current authenticated user
   Future<CertiliaUser?> getCurrentUser() async {

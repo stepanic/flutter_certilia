@@ -64,7 +64,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _checkAuthStatus() async {
-    if (_certilia.isAuthenticated) {
+    // Check authentication status (loads from storage if needed)
+    final isAuth = await _certilia.checkAuthenticationStatus();
+    
+    if (isAuth) {
       try {
         final user = await _certilia.getCurrentUser();
         if (!mounted) return;
