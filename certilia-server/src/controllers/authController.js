@@ -214,6 +214,14 @@ export const exchangeCode = async (req, res, next) => {
       codeVerifier: session.codeVerifier,
       redirectUri: session.redirectUri,
     });
+    
+    logger.info('Token exchange response:', {
+      hasAccessToken: !!tokenResponse.access_token,
+      hasRefreshToken: !!tokenResponse.refresh_token,
+      hasIdToken: !!tokenResponse.id_token,
+      expiresIn: tokenResponse.expires_in,
+      tokenType: tokenResponse.token_type
+    });
 
     // Store the original tokens from Certilia
     const certiliaTokens = {
@@ -223,8 +231,11 @@ export const exchangeCode = async (req, res, next) => {
       expires_in: tokenResponse.expires_in,
     };
 
-    // Get user info
-    const userInfo = await certiliaService.getUserInfo(tokenResponse.access_token);
+    // Get user info - some providers require id_token as well
+    const userInfo = await certiliaService.getUserInfo(
+      tokenResponse.access_token,
+      tokenResponse.id_token
+    );
 
     // Merge ID token claims with user info if available
     let idTokenClaims = {};

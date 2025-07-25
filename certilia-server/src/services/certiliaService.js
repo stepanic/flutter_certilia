@@ -180,18 +180,58 @@ class CertiliaService {
   /**
    * Get user information
    * @param {string} accessToken - Access token
+   * @param {string} idToken - ID token (optional, may be required for token binding)
    * @returns {Promise<Object>} User information
    */
-  async getUserInfo(accessToken) {
+  async getUserInfo(accessToken, idToken = null) {
     try {
-      const response = await this.client.get(config.certilia.userInfoEndpoint, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+      };
+      
+      // Some environments require token binding with ID token
+      if (idToken) {
+        headers['X-ID-Token'] = idToken;
+      }
+      
+      // Try GET first
+      let response;
+      try {
+        response = await this.client.get(config.certilia.userInfoEndpoint, {
+          headers,
+        });
+      } catch (getError) {
+        // If GET fails with 400, try POST with access token in body
+        if (getError.response?.status === 400) {
+          logger.info('GET userinfo failed, trying POST method');
+          const params = new URLSearchParams({
+            access_token: accessToken,
+          });
+          
+          response = await this.client.post(
+            config.certilia.userInfoEndpoint,
+            params.toString(),
+            {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+            }
+          );
+        } else {
+          throw getError;
+        }
+      }
 
       return response.data;
     } catch (error) {
+      logger.error('User info fetch error:', {
+        url: `${config.certilia.baseUrl}${config.certilia.userInfoEndpoint}`,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        error: error.message
+      });
+      
       if (error.response?.status === 401) {
         throw new ExternalServiceError(
           'Invalid or expired access token',
@@ -199,7 +239,7 @@ class CertiliaService {
         );
       }
       throw new ExternalServiceError(
-        'Failed to fetch user information',
+        `Failed to fetch user information: ${error.response?.data?.error || error.message}`,
         'certilia'
       );
     }
