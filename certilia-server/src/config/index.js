@@ -6,6 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load environment variables
+// First try .env.local, then .env
+dotenv.config({ path: join(__dirname, '../../.env.local') });
 dotenv.config({ path: join(__dirname, '../../.env') });
 
 export const config = {

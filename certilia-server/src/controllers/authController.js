@@ -7,6 +7,7 @@ import { AuthenticationError, ValidationError } from '../utils/errors.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import config from '../config/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -89,6 +90,13 @@ function renderCallbackTemplate(data) {
 export const initializeAuth = async (req, res, next) => {
   try {
     const { redirect_uri, state: clientState } = req.query;
+    
+    // Debug logging
+    logger.info('Initializing auth with config:', {
+      baseUrl: config.certilia.baseUrl,
+      clientId: config.certilia.clientId,
+      environment: process.env.NODE_ENV
+    });
 
     // Generate OAuth parameters
     const state = clientState || generateState();
