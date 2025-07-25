@@ -189,11 +189,6 @@ class CertiliaService {
         Authorization: `Bearer ${accessToken}`,
       };
       
-      // Some environments require token binding with ID token
-      if (idToken) {
-        headers['X-ID-Token'] = idToken;
-      }
-      
       // Try GET first
       let response;
       try {

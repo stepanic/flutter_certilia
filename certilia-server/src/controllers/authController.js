@@ -220,7 +220,8 @@ export const exchangeCode = async (req, res, next) => {
       hasRefreshToken: !!tokenResponse.refresh_token,
       hasIdToken: !!tokenResponse.id_token,
       expiresIn: tokenResponse.expires_in,
-      tokenType: tokenResponse.token_type
+      tokenType: tokenResponse.token_type,
+      scope: tokenResponse.scope
     });
 
     // Store the original tokens from Certilia
@@ -231,17 +232,10 @@ export const exchangeCode = async (req, res, next) => {
       expires_in: tokenResponse.expires_in,
     };
 
-    // Get user info - some providers require id_token as well
-    const userInfo = await certiliaService.getUserInfo(
-      tokenResponse.access_token,
-      tokenResponse.id_token
-    );
-
-    // Merge ID token claims with user info if available
+    // First decode ID token to get claims
     let idTokenClaims = {};
     if (tokenResponse.id_token) {
       try {
-        // Decode ID token (without verification for now - in production, verify signature)
         const decoded = tokenService.decodeToken(tokenResponse.id_token);
         
         // Validate nonce if present
@@ -250,16 +244,52 @@ export const exchangeCode = async (req, res, next) => {
         }
         
         idTokenClaims = decoded;
-        logger.debug('ID token decoded successfully', { 
+        logger.info('ID token decoded successfully', {
           sub: decoded.sub,
-          nonce: decoded.nonce,
-          aud: decoded.aud,
+          name: decoded.name,
+          given_name: decoded.given_name,
+          family_name: decoded.family_name,
+          email: decoded.email,
           iss: decoded.iss,
+          aud: decoded.aud
         });
       } catch (error) {
-        logger.warn('Failed to decode ID token', { error: error.message });
+        logger.error('Failed to decode ID token:', error);
+        throw error;
       }
     }
+    
+    // Try to get user info from userinfo endpoint
+    let userInfo = {};
+    try {
+      userInfo = await certiliaService.getUserInfo(
+        tokenResponse.access_token,
+        tokenResponse.id_token
+      );
+      logger.info('UserInfo endpoint succeeded');
+    } catch (error) {
+      logger.warn('UserInfo endpoint failed:', error.message);
+      // If userinfo fails but we have ID token claims, use them
+      if (idTokenClaims && idTokenClaims.sub) {
+        logger.info('Using ID token claims as fallback');
+        userInfo = {
+          sub: idTokenClaims.sub,
+          firstName: idTokenClaims.given_name,
+          lastName: idTokenClaims.family_name,
+          fullName: idTokenClaims.name || `${idTokenClaims.given_name || ''} ${idTokenClaims.family_name || ''}`.trim(),
+          email: idTokenClaims.email,
+          oib: idTokenClaims.pin || idTokenClaims.oib,
+          dateOfBirth: idTokenClaims.birthdate,
+          // Include all other claims
+          ...idTokenClaims
+        };
+      } else {
+        throw error;
+      }
+    }
+
+    // Merge any additional ID token claims with user info
+    // (ID token was already decoded above)
 
     // Generate our own JWT tokens with complete user data
     const completeUserInfo = {
