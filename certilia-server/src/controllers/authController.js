@@ -1,6 +1,7 @@
 import certiliaService from '../services/certiliaService.js';
 import tokenService from '../services/tokenService.js';
 import sessionService from '../services/sessionService.js';
+import pollingSessionService from '../services/pollingSessionService.js';
 import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, generateState, generateNonce } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
 import { AuthenticationError, ValidationError } from '../utils/errors.js';
@@ -166,6 +167,19 @@ export const handleCallback = async (req, res, next) => {
         deepLink: null,
       };
       
+      // Update polling session with error
+      if (state) {
+        const updated = pollingSessionService.updateSessionByState(state, {
+          error,
+          errorDescription: error_description,
+          success: false,
+        });
+        
+        if (updated) {
+          logger.info('Updated polling session with error for state:', state);
+        }
+      }
+      
       return res.send(renderCallbackTemplate(errorData));
     }
 
@@ -193,6 +207,17 @@ export const handleCallback = async (req, res, next) => {
     };
 
     logger.info('Rendering success callback template with data:', templateData);
+    
+    // Update polling session if exists
+    const updated = pollingSessionService.updateSessionByState(state, {
+      code,
+      state,
+      success: true,
+    });
+    
+    if (updated) {
+      logger.info('Updated polling session for state:', state);
+    }
 
     // For mobile apps, return an HTML page that can be parsed
     res.send(renderCallbackTemplate(templateData));
@@ -392,6 +417,55 @@ export const logout = async (req, res, next) => {
     res.json({
       message: 'Logged out successfully',
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Start polling session for cross-origin authentication
+ */
+export const startPolling = async (req, res, next) => {
+  try {
+    const { state, session_id } = req.body;
+
+    logger.info('Starting polling session', { state, session_id });
+
+    // Create polling session
+    const pollingSession = pollingSessionService.createSession({
+      state,
+      sessionId: session_id,
+    });
+
+    res.json({
+      polling_id: pollingSession.pollingId,
+      expires_at: pollingSession.expiresAt,
+      status: 'pending',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Check polling session status
+ */
+export const checkPollingStatus = async (req, res, next) => {
+  try {
+    const { polling_id } = req.params;
+
+    logger.info('Checking polling status', { polling_id });
+
+    const status = pollingSessionService.getStatus(polling_id);
+
+    if (status.status === 'not_found') {
+      return res.status(404).json({
+        error: 'Session not found',
+        message: status.error,
+      });
+    }
+
+    res.json(status);
   } catch (error) {
     next(error);
   }

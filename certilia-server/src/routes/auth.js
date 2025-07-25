@@ -69,4 +69,21 @@ router.get('/user', authenticate, authController.getCurrentUser);
  */
 router.post('/logout', authenticate, authController.logout);
 
+/**
+ * @route POST /auth/polling/start
+ * @desc Start polling session for cross-origin auth
+ * @body {string} state - OAuth state
+ * @body {string} session_id - Session ID
+ * @returns {Object} Polling session info
+ */
+router.post('/polling/start', authController.startPolling);
+
+/**
+ * @route GET /auth/polling/:polling_id/status
+ * @desc Check polling session status
+ * @param {string} polling_id - Polling session ID
+ * @returns {Object} Session status and result
+ */
+router.get('/polling/:polling_id/status', authController.checkPollingStatus);
+
 export default router;

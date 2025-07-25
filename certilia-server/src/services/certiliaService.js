@@ -91,7 +91,15 @@ class CertiliaService {
       prompt: 'login',
     });
 
-    return `${config.certilia.baseUrl}${config.certilia.authEndpoint}?${params.toString()}`;
+    const authUrl = `${config.certilia.baseUrl}${config.certilia.authEndpoint}?${params.toString()}`;
+    
+    logger.info('Building authorization URL', {
+      redirectUri,
+      state,
+      authUrl,
+    });
+
+    return authUrl;
   }
 
   /**

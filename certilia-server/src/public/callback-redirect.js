@@ -61,23 +61,18 @@
         }
     }
     
-    // Option 2: Redirect with data in URL fragment
-    if (returnUrl && success && code) {
-        console.log('Redirecting with data in fragment');
-        const redirectUrl = new URL(returnUrl);
-        
-        // Add data as URL fragment (doesn't get sent to server)
-        const fragmentData = btoa(JSON.stringify(callbackData));
-        redirectUrl.hash = `certilia-callback=${fragmentData}`;
-        
-        console.log('Redirecting to:', redirectUrl.toString());
-        
-        // Redirect after short delay to ensure logs are captured
-        setTimeout(() => {
-            window.location.href = redirectUrl.toString();
-        }, 100);
-    } else {
-        console.log('Cannot redirect - missing return URL or authentication failed');
-        // Just show the success/error page
-    }
+    // For polling approach - don't redirect, just close the window
+    console.log('Polling approach - closing window after delay');
+    console.log('Authentication result will be retrieved via polling');
+    
+    // Give user time to see the success message
+    setTimeout(() => {
+        console.log('Closing authentication window...');
+        try {
+            window.close();
+        } catch (e) {
+            console.log('Could not close window:', e);
+            console.log('User may need to close manually');
+        }
+    }, 2000); // 2 second delay so user sees the success message
 })();

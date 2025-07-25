@@ -142,4 +142,20 @@
     } catch (e) {
         console.error('Error accessing window properties:', e);
     }
+    
+    // Auto-close window for polling approach
+    if (!window.opener || window.opener === window) {
+        console.log('No opener detected - using polling approach');
+        console.log('Window will close automatically in 3 seconds...');
+        
+        setTimeout(() => {
+            console.log('Attempting to close window...');
+            try {
+                window.close();
+            } catch (e) {
+                console.error('Could not close window:', e);
+                console.log('User may need to close this window manually');
+            }
+        }, 3000);
+    }
 })();

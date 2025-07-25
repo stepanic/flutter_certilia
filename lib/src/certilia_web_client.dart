@@ -56,17 +56,24 @@ class CertiliaWebClient {
       // Initialize OAuth flow
       final authData = await _initializeOAuthFlow();
       
+      // Start polling session
+      final pollingData = await _startPollingSession(
+        state: authData['state'],
+        sessionId: authData['session_id'],
+      );
+      
       // Open popup for authentication
-      _log('Opening authentication popup...');
-      final code = await _openAuthPopup(
+      _log('Opening authentication popup with polling...');
+      final code = await _openAuthPopupWithPolling(
         authData['authorization_url'],
         authData['state'],
+        pollingData['polling_id'],
       );
 
-      _log('Popup closed, received code: ${code ?? "null"}');
+      _log('Authentication flow completed, received code: ${code ?? "null"}');
       
       if (code == null) {
-        _log('ERROR: No code received from popup - authentication was cancelled or failed');
+        _log('ERROR: No code received - authentication was cancelled or failed');
         throw const CertiliaAuthenticationException(
           message: 'Authentication was cancelled',
         );
@@ -135,7 +142,173 @@ class CertiliaWebClient {
     return jsonDecode(response.body);
   }
 
-  /// Opens authentication popup and returns authorization code
+  /// Start polling session on server
+  Future<Map<String, dynamic>> _startPollingSession({
+    required String state,
+    required String sessionId,
+  }) async {
+    if (serverUrl == null) {
+      throw const CertiliaException(
+        message: 'Server URL is required for polling authentication',
+      );
+    }
+
+    _log('Starting polling session for state: $state');
+    
+    final response = await _httpClient.post(
+      Uri.parse('$serverUrl/api/auth/polling/start'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'state': state,
+        'session_id': sessionId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw CertiliaNetworkException(
+        message: 'Failed to start polling session',
+        statusCode: response.statusCode,
+        details: response.body,
+      );
+    }
+
+    final data = jsonDecode(response.body);
+    _log('Polling session created: ${data['polling_id']}');
+    return data;
+  }
+
+  /// Open authentication popup with server polling
+  Future<String?> _openAuthPopupWithPolling(
+    String authorizationUrl,
+    String expectedState,
+    String pollingId,
+  ) async {
+    final completer = Completer<String?>();
+    
+    // Calculate popup dimensions
+    final width = 500;
+    final height = 700;
+    final left = (html.window.screen!.width! - width) ~/ 2;
+    final top = (html.window.screen!.height! - height) ~/ 2;
+    
+    _log('===== POPUP WITH POLLING AUTHENTICATION START =====');
+    _log('Authorization URL: $authorizationUrl');
+    _log('Polling ID: $pollingId');
+    
+    // Open popup window
+    final popup = html.window.open(
+      authorizationUrl,
+      'certilia_auth',
+      'width=$width,height=$height,left=$left,top=$top',
+    );
+    
+    // Check if popup was blocked (although it shouldn't be null in dart:html)
+    // ignore: unnecessary_null_comparison
+    if (popup == null) {
+      throw const CertiliaAuthenticationException(
+        message: 'Failed to open authentication popup. Please check popup blocker settings.',
+      );
+    }
+    
+    _log('Popup opened successfully');
+    
+    // Start polling for result
+    Timer? pollTimer;
+    Timer? popupCheckTimer;
+    Timer? timeoutTimer;
+    bool isPolling = true;
+    
+    void cleanup() {
+      _log('Cleaning up polling timers');
+      isPolling = false;
+      pollTimer?.cancel();
+      popupCheckTimer?.cancel();
+      timeoutTimer?.cancel();
+    }
+    
+    // Overall timeout for polling
+    timeoutTimer = Timer(const Duration(minutes: 5), () {
+      if (!completer.isCompleted) {
+        _log('Polling timeout reached after 5 minutes');
+        cleanup();
+        completer.complete(null);
+        try {
+          popup.close();
+        } catch (_) {}
+      }
+    });
+    
+    // Poll server for authentication result
+    pollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!isPolling) return;
+      
+      try {
+        _log('Polling server for auth status...');
+        
+        final response = await _httpClient.get(
+          Uri.parse('$serverUrl/api/auth/polling/$pollingId/status'),
+        );
+        
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          _log('Poll response: ${data['status']}');
+          
+          if (data['status'] == 'completed' && data['result'] != null) {
+            _log('Authentication completed via polling!');
+            _log('Code: ${data['result']['code']}');
+            cleanup();
+            if (!completer.isCompleted) {
+              completer.complete(data['result']['code']);
+            }
+            try {
+              popup.close();
+            } catch (_) {}
+          } else if (data['status'] == 'error') {
+            _log('Authentication failed: ${data['error']}');
+            cleanup();
+            if (!completer.isCompleted) {
+              completer.complete(null);
+            }
+            try {
+              popup.close();
+            } catch (_) {}
+          }
+        } else if (response.statusCode == 404) {
+          _log('Polling session expired or not found');
+          cleanup();
+          if (!completer.isCompleted) {
+            completer.complete(null);
+          }
+        }
+      } catch (e) {
+        _log('Polling error: $e');
+      }
+    });
+    
+    // Check if popup was closed
+    popupCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (popup.closed ?? false) {
+        _log('Popup was closed by user');
+        // Don't immediately complete with null - give polling a chance
+        // Wait a bit more for polling to get the result
+        Timer(const Duration(seconds: 3), () {
+          if (!completer.isCompleted && isPolling) {
+            _log('Popup closed and no polling result - completing with null');
+            cleanup();
+            completer.complete(null);
+          }
+        });
+        // Stop checking popup
+        timer.cancel();
+      }
+    });
+    
+    return completer.future;
+  }
+
+  // OLD METHOD - Commented out as we now use polling approach for cross-origin scenarios
+  // Kept for reference only - see _openAuthPopupWithPolling() above
+  /*
   Future<String?> _openAuthPopup(String authorizationUrl, String expectedState) async {
     final completer = Completer<String?>();
     
@@ -522,6 +695,7 @@ class CertiliaWebClient {
     
     return completer.future;
   }
+  */
 
   /// Exchange authorization code for tokens
   Future<Map<String, dynamic>> _exchangeCodeForTokens({
