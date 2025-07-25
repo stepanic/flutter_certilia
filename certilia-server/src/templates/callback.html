@@ -161,60 +161,12 @@
         <div id="oauth-error-description">{{errorDescription}}</div>
     </div>
     
-    <script>
-        // Debug logging
-        console.log('Callback page loaded');
-        console.log('Success:', {{success}});
-        console.log('Code:', '{{code}}');
-        console.log('State:', '{{state}}');
-        console.log('Error:', '{{error}}');
-        console.log('Window opener:', window.opener);
-        
-        // For mobile apps that use JavaScript interface
-        if (window.OAuthCallback) {
-            window.OAuthCallback.onComplete({
-                success: {{success}},
-                code: '{{code}}',
-                state: '{{state}}',
-                error: '{{error}}',
-                errorDescription: '{{errorDescription}}'
-            });
-        }
-        
-        // For web platform - send message to opener window
-        if (window.opener && window.opener !== window) {
-            const message = {
-                type: 'certilia_callback',
-                success: {{success}},
-                code: '{{code}}',
-                state: '{{state}}',
-                error: '{{error}}',
-                errorDescription: '{{errorDescription}}'
-            };
-            
-            // Small delay to ensure message is processed
-            setTimeout(() => {
-                try {
-                    window.opener.postMessage(JSON.stringify(message), '*');
-                    console.log('Message sent to opener:', message);
-                    
-                    // Auto-close popup after sending message
-                    setTimeout(() => {
-                        window.close();
-                    }, 100);
-                } catch (e) {
-                    console.error('Failed to send message to opener:', e);
-                }
-            }, 100);
-        }
-        
-        // For apps using deep links
-        const deepLink = '{{deepLink}}';
-        if (deepLink && deepLink !== 'null') {
-            setTimeout(() => {
-                window.location.href = deepLink;
-            }, 1000);
-        }
-    </script>
+    <!-- Hidden element for deep link -->
+    <div id="deep-link" style="display: none;" data-link="{{deepLink}}">{{deepLink}}</div>
+    
+    <!-- External scripts to avoid CSP issues -->
+    <script src="/callback.js"></script>
+    <script src="/callback-alternative.js"></script>
+    <script src="/callback-redirect.js"></script>
 </body>
 </html>

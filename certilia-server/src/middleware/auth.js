@@ -20,6 +20,11 @@ export const authenticate = async (req, res, next) => {
     req.user = decoded.user;
     req.userId = decoded.sub;
     req.tokenId = decoded.jti;
+    
+    // Attach certilia tokens if present
+    if (decoded.certilia_tokens) {
+      req.certilia_tokens = decoded.certilia_tokens;
+    }
 
     next();
   } catch (error) {

@@ -2,21 +2,30 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { config } from './config/index.js';
 import logger from './utils/logger.js';
 import authRoutes from './routes/auth.js';
 import healthRoutes from './routes/health.js';
+import userRoutes from './routes/userRoutes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Create Express app
 const app = express();
 
-// Security middleware
+// Security middleware with updated CSP for callback page
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'", "*"],
     },
   },
 }));
@@ -58,6 +67,9 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Request logging
 app.use((req, res, next) => {
   logger.info('Incoming request', {
@@ -72,6 +84,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/user', userRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -87,6 +100,9 @@ app.get('/', (req, res) => {
         refresh: 'POST /api/auth/refresh',
         user: 'GET /api/auth/user',
         logout: 'POST /api/auth/logout',
+      },
+      user: {
+        extendedInfo: 'GET /api/user/extended-info',
       },
     },
   });

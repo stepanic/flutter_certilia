@@ -134,6 +134,16 @@ export const handleCallback = async (req, res, next) => {
     const { code, state } = req.query;
     const { error, error_description } = req.query;
 
+    // Enhanced debug logging
+    logger.info('===== OAUTH CALLBACK RECEIVED =====');
+    logger.info('Full query params:', req.query);
+    logger.info('Code:', code || 'null');
+    logger.info('State:', state || 'null');
+    logger.info('Error:', error || 'null');
+    logger.info('Error Description:', error_description || 'null');
+    logger.info('Request headers:', req.headers);
+    logger.info('Request URL:', req.url);
+
     // Check for OAuth errors
     if (error) {
       logger.warn('OAuth callback error', { error, error_description });
@@ -181,6 +191,8 @@ export const handleCallback = async (req, res, next) => {
       buttonLink: '/',
       deepLink: null, // Could be configured for specific apps
     };
+
+    logger.info('Rendering success callback template with data:', templateData);
 
     // For mobile apps, return an HTML page that can be parsed
     res.send(renderCallbackTemplate(templateData));

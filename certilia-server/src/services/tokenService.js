@@ -63,6 +63,11 @@ class TokenService {
       },
     };
 
+    // Include certilia_tokens if present
+    if (user.certilia_tokens) {
+      payload.certilia_tokens = user.certilia_tokens;
+    }
+
     const accessToken = this.generateAccessToken(payload);
     const refreshToken = this.generateRefreshToken(payload);
 
