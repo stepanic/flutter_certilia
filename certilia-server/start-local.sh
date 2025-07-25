@@ -40,18 +40,6 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Copy environment file to .env.local
-echo -e "${BLUE}📋 Setting up $ENV_NAME environment...${NC}"
-cp "$ENV_FILE" .env.local
-echo -e "${GREEN}✅ Copied $ENV_FILE to .env.local${NC}"
-
-# Copy local env if .env doesn't exist
-if [ ! -f .env ]; then
-    echo "📝 Creating .env from .env.local..."
-    cp .env.local .env
-    echo -e "${GREEN}✅ Created .env with $ENV_NAME Certilia credentials${NC}"
-fi
-
 # Install dependencies if needed
 if [ ! -d node_modules ]; then
     echo "📦 Installing dependencies..."
@@ -86,4 +74,10 @@ echo "    Init Auth: https://uniformly-credible-opossum.ngrok-free.app/api/auth/
 echo ""
 
 echo -e "${GREEN}🚀 Starting server...${NC}"
-npm run dev
+
+# Run appropriate npm script based on environment
+if [ "$ENV_TYPE" = "test" ]; then
+    npm run dev:test-env
+else
+    npm run dev:prod-env
+fi
