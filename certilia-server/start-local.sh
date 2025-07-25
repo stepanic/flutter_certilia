@@ -7,13 +7,49 @@ echo "=============================================="
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+BLUE='\033[0;34m'
 NC='\033[0m'
+
+# Check for environment argument
+ENV_TYPE=${1:-test}
+
+# Validate environment type
+if [ "$ENV_TYPE" != "test" ] && [ "$ENV_TYPE" != "prod" ]; then
+    echo -e "${RED}❌ Invalid environment. Use 'test' or 'prod'${NC}"
+    echo "Usage: ./start-local.sh [test|prod]"
+    exit 1
+fi
+
+# Set environment-specific variables
+if [ "$ENV_TYPE" = "test" ]; then
+    ENV_FILE=".env.local.test"
+    ENV_NAME="TEST"
+    CERTILIA_HOST="idp.test.certilia.com"
+    CLIENT_ID="991dffbb1cdd4d51423e1a5de323f13b15256c63"
+else
+    ENV_FILE=".env.local.production"
+    ENV_NAME="PRODUCTION"
+    CERTILIA_HOST="idp.certilia.com"
+    CLIENT_ID="1a6ec445bbe092c1465f3d19aea9757e3e278a75"
+fi
+
+# Check if environment file exists
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${RED}❌ Environment file $ENV_FILE not found!${NC}"
+    echo "Please create it from the example files."
+    exit 1
+fi
+
+# Copy environment file to .env.local
+echo -e "${BLUE}📋 Setting up $ENV_NAME environment...${NC}"
+cp "$ENV_FILE" .env.local
+echo -e "${GREEN}✅ Copied $ENV_FILE to .env.local${NC}"
 
 # Copy local env if .env doesn't exist
 if [ ! -f .env ]; then
     echo "📝 Creating .env from .env.local..."
     cp .env.local .env
-    echo -e "${GREEN}✅ Created .env with your Certilia credentials${NC}"
+    echo -e "${GREEN}✅ Created .env with $ENV_NAME Certilia credentials${NC}"
 fi
 
 # Install dependencies if needed
@@ -30,10 +66,11 @@ fi
 echo ""
 echo -e "${GREEN}📋 Configuration Summary:${NC}"
 echo "================================"
-echo "Client ID: 991dffbb1cdd4d51423e1a5de323f13b15256c63"
+echo -e "Environment: ${BLUE}$ENV_NAME${NC}"
+echo "Client ID: $CLIENT_ID"
 echo "Server URL: https://uniformly-credible-opossum.ngrok-free.app"
 echo "Callback URL: https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback"
-echo "Certilia Environment: TEST (idp.test.certilia.com)"
+echo "Certilia Environment: $CERTILIA_HOST"
 echo ""
 
 echo -e "${YELLOW}🔧 Starting Steps:${NC}"
