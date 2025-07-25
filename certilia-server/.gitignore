@@ -5,6 +5,8 @@ node_modules/
 .env
 .env.local
 .env.*.local
+# But allow .env.production for documentation
+!.env.production
 
 # Logs
 logs/
