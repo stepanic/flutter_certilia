@@ -78,6 +78,17 @@ class _HomePageState extends State<HomePage> {
         }
       } catch (e) {
         debugPrint('Failed to get current user: $e');
+        // If we failed to get user, check if we're still authenticated
+        if (!_certilia.isAuthenticated && mounted) {
+          setState(() {
+            _user = null;
+            _extendedInfo = null;
+            _tokenExpiryTime = null;
+            _error = _isEnglish 
+                ? 'Session expired. Please sign in again.'
+                : 'Sesija je istekla. Molimo prijavite se ponovno.';
+          });
+        }
       }
     }
   }
@@ -130,6 +141,21 @@ class _HomePageState extends State<HomePage> {
     try {
       final extendedInfo = await _certilia.getExtendedUserInfo();
       if (!mounted) return;
+      
+      // Check if we got null because of logout
+      if (extendedInfo == null && !_certilia.isAuthenticated) {
+        // Token was expired and user was logged out
+        setState(() {
+          _user = null;
+          _extendedInfo = null;
+          _tokenExpiryTime = null;
+          _isLoading = false;
+          _error = _isEnglish 
+              ? 'Session expired. Please sign in again.'
+              : 'Sesija je istekla. Molimo prijavite se ponovno.';
+        });
+        return;
+      }
       
       setState(() {
         _extendedInfo = extendedInfo;
@@ -554,7 +580,7 @@ class _HomePageState extends State<HomePage> {
                       _isEnglish 
                           ? 'assets/images/sign_in_with_certilia.png'
                           : 'assets/images/prijava_sa_certilia.png',
-                      height: 56,
+                      width: 256,
                       fit: BoxFit.contain,
                     ),
                   ),

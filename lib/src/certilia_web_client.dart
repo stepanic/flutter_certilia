@@ -904,12 +904,28 @@ class CertiliaWebClient {
         _log('Extended user info fetched successfully');
         _log('Available fields: ${data['availableFields']}');
         return CertiliaExtendedInfo.fromJson(data);
-      } else if (response.statusCode == 401) {
-        _log('Token expired or invalid, trying to refresh');
+      } else if (response.statusCode == 401 || response.statusCode == 502) {
+        _log('Token expired or invalid (${response.statusCode})');
+        
+        // Check if error indicates expired token
+        if (response.body.contains('Invalid or expired access token')) {
+          _log('Token is definitely expired, clearing authentication');
+          // Clear invalid tokens
+          await logout();
+          return null;
+        }
+        
+        // Try to refresh if we have a refresh token
         if (_currentToken!.refreshToken != null) {
-          await refreshToken();
-          // Retry with new token
-          return getExtendedUserInfo();
+          try {
+            await refreshToken();
+            // Retry with new token
+            return getExtendedUserInfo();
+          } catch (refreshError) {
+            _log('Refresh failed, clearing authentication: $refreshError');
+            await logout();
+            return null;
+          }
         }
         return null;
       } else {

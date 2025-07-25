@@ -190,15 +190,15 @@ class CertiliaWebViewClient {
         context: context,
         barrierDismissible: false,
         builder: (BuildContext context) {
-          return const Center(
+          return Center(
             child: Card(
               child: Padding(
-                padding: EdgeInsets.all(24.0),
+                padding: const EdgeInsets.all(24.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
                     Text(Localizations.localeOf(context).languageCode == 'hr' 
                         ? 'Dovršavanje prijave...' 
                         : 'Completing authentication...'),
