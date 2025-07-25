@@ -72,11 +72,19 @@ class CertiliaWebViewClient {
       }
 
       // Exchange code for tokens
-      final tokenData = await _exchangeCodeForTokens(
-        code: code,
-        state: authData['state'],
-        sessionId: authData['session_id'],
-      );
+      Map<String, dynamic> tokenData;
+      try {
+        tokenData = await _exchangeCodeForTokens(
+          code: code,
+          state: authData['state'],
+          sessionId: authData['session_id'],
+        );
+      } finally {
+        // Close loading dialog if still showing
+        if (context.mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      }
 
       // Create token object
       _currentToken = CertiliaToken(
@@ -101,6 +109,12 @@ class CertiliaWebViewClient {
       return user;
     } catch (e) {
       _log('Authentication failed: $e');
+      
+      // Make sure to close any loading dialog
+      if (context.mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
       if (e is CertiliaException) {
         rethrow;
       }
@@ -119,22 +133,38 @@ class CertiliaWebViewClient {
       );
     }
 
-    final response = await _httpClient.get(
-      Uri.parse('$serverUrl/api/auth/initialize?response_type=code&redirect_uri=$serverUrl/api/auth/callback'),
-      headers: {
-        'ngrok-skip-browser-warning': 'true',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      throw CertiliaNetworkException(
-        message: 'Failed to initialize OAuth flow',
-        statusCode: response.statusCode,
-        details: response.body,
+    // Create a fresh HTTP client for this request
+    final client = http.Client();
+    try {
+      final response = await client.get(
+        Uri.parse('$serverUrl/api/auth/initialize?response_type=code&redirect_uri=$serverUrl/api/auth/callback'),
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw CertiliaNetworkException(
+            message: 'Initialize request timed out',
+            statusCode: 408,
+            details: 'Request timed out after 10 seconds',
+          );
+        },
       );
+      
+      if (response.statusCode != 200) {
+        throw CertiliaNetworkException(
+          message: 'Failed to initialize OAuth flow',
+          statusCode: response.statusCode,
+          details: response.body,
+        );
+      }
+
+      return jsonDecode(response.body);
+    } finally {
+      client.close();
     }
 
-    return jsonDecode(response.body);
   }
 
   /// Shows WebView for authentication and returns authorization code
@@ -143,7 +173,7 @@ class CertiliaWebViewClient {
     String authorizationUrl,
     String expectedState,
   ) async {
-    return await Navigator.push<String?>(
+    final code = await Navigator.push<String?>(
       context,
       MaterialPageRoute(
         builder: (context) => _CertiliaWebViewScreen(
@@ -153,6 +183,35 @@ class CertiliaWebViewClient {
         ),
       ),
     );
+    
+    // If we got a code, show loading dialog while exchanging tokens
+    if (code != null && context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(Localizations.localeOf(context).languageCode == 'hr' 
+                        ? 'Dovršavanje prijave...' 
+                        : 'Completing authentication...'),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+    
+    return code;
   }
 
   /// Exchange authorization code for tokens with retry logic
@@ -176,30 +235,36 @@ class CertiliaWebViewClient {
       try {
         _log('Token exchange attempt ${i + 1} of $retries');
         
-        response = await _httpClient.post(
-          Uri.parse('$serverUrl/api/auth/exchange'),
-          headers: {
-            'Content-Type': 'application/json',
-            'ngrok-skip-browser-warning': 'true',
-          },
-          body: jsonEncode({
-            'code': code,
-            'state': state,
-            'session_id': sessionId,
-          }),
-        ).timeout(
-          const Duration(seconds: 30),
-          onTimeout: () {
-            throw CertiliaNetworkException(
-              message: 'Token exchange timed out',
-              statusCode: 408,
-              details: 'Request timed out after 30 seconds',
-            );
-          },
-        );
-        
-        // If we got a response, break out of retry loop
-        break;
+        // Create a new HTTP client for each retry attempt
+        final client = http.Client();
+        try {
+          response = await client.post(
+            Uri.parse('$serverUrl/api/auth/exchange'),
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+            },
+            body: jsonEncode({
+              'code': code,
+              'state': state,
+              'session_id': sessionId,
+            }),
+          ).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw CertiliaNetworkException(
+                message: 'Token exchange timed out',
+                statusCode: 408,
+                details: 'Request timed out after 30 seconds',
+              );
+            },
+          );
+          
+          // If we got a response, break out of retry loop
+          break;
+        } finally {
+          client.close();
+        }
       } catch (e) {
         lastError = e as Exception;
         _log('Token exchange attempt ${i + 1} failed: $e');
