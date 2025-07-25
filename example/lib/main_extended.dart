@@ -56,7 +56,10 @@ class _HomePageState extends State<HomePage> {
       config: config,
       serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
     );
-    _checkAuthStatus();
+    // Give time for async token loading to complete
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _checkAuthStatus();
+    });
   }
 
   Future<void> _checkAuthStatus() async {
