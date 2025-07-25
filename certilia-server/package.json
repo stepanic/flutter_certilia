@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "dev:test-env": "cp .env.local.test .env.local && nodemon src/index.js",
+    "dev:prod-env": "cp .env.local.production .env.local && nodemon src/index.js",
     "test": "jest",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write \"src/**/*.js\""
