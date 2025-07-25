@@ -36,6 +36,7 @@ class _HomePageState extends State<HomePage> {
   bool _isLoading = false;
   String? _error;
   DateTime? _tokenExpiryTime;
+  bool _isEnglish = false; // Default to Croatian
 
   @override
   void initState() {
@@ -147,8 +148,10 @@ class _HomePageState extends State<HomePage> {
       // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Token refreshed successfully'),
+          SnackBar(
+            content: Text(_isEnglish 
+                ? 'Token refreshed successfully'
+                : 'Token uspješno osvježen'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
@@ -201,6 +204,40 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Language toggle
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: !_isEnglish ? null : () => setState(() => _isEnglish = false),
+                      style: TextButton.styleFrom(
+                        backgroundColor: !_isEnglish 
+                            ? Theme.of(context).colorScheme.primary 
+                            : Colors.transparent,
+                        foregroundColor: !_isEnglish 
+                            ? Theme.of(context).colorScheme.onPrimary 
+                            : Theme.of(context).colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      ),
+                      child: const Text('HR'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: _isEnglish ? null : () => setState(() => _isEnglish = true),
+                      style: TextButton.styleFrom(
+                        backgroundColor: _isEnglish 
+                            ? Theme.of(context).colorScheme.primary 
+                            : Colors.transparent,
+                        foregroundColor: _isEnglish 
+                            ? Theme.of(context).colorScheme.onPrimary 
+                            : Theme.of(context).colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      ),
+                      child: const Text('EN'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
                 if (_user != null) ...[
                   const Icon(
                     Icons.check_circle,
@@ -209,7 +246,9 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Welcome, ${_user!.fullName ?? 'User'}!',
+                    _isEnglish 
+                        ? 'Welcome, ${_user!.fullName ?? 'User'}!'
+                        : 'Dobrodošli, ${_user!.fullName ?? 'Korisnik'}!',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 32),
@@ -222,17 +261,17 @@ class _HomePageState extends State<HomePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Basic User Info',
+                            _isEnglish ? 'Basic User Info' : 'Osnovni podaci',
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const Divider(),
                           _buildInfoRow('ID', _user!.sub),
-                          _buildInfoRow('First Name', _user!.firstName),
-                          _buildInfoRow('Last Name', _user!.lastName),
+                          _buildInfoRow(_isEnglish ? 'First Name' : 'Ime', _user!.firstName),
+                          _buildInfoRow(_isEnglish ? 'Last Name' : 'Prezime', _user!.lastName),
                           _buildInfoRow('OIB', _user!.oib),
-                          _buildInfoRow('Email', _user!.email),
+                          _buildInfoRow(_isEnglish ? 'Email' : 'E-pošta', _user!.email),
                           _buildInfoRow(
-                            'Date of Birth',
+                            _isEnglish ? 'Date of Birth' : 'Datum rođenja',
                             _user!.dateOfBirth?.toString().split(' ')[0],
                           ),
                         ],
@@ -254,19 +293,21 @@ class _HomePageState extends State<HomePage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Extended User Info',
+                                  _isEnglish ? 'Extended User Info' : 'Prošireni podaci',
                                   style: Theme.of(context).textTheme.titleLarge,
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.refresh),
                                   onPressed: _isLoading ? null : _getExtendedInfo,
-                                  tooltip: 'Refresh',
+                                  tooltip: _isEnglish ? 'Refresh' : 'Osvježi',
                                 ),
                               ],
                             ),
                             const Divider(),
                             Text(
-                              'Total fields available: ${_extendedInfo!.availableFields.length}',
+                              _isEnglish 
+                                  ? 'Total fields available: ${_extendedInfo!.availableFields.length}'
+                                  : 'Ukupno dostupnih polja: ${_extendedInfo!.availableFields.length}',
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: Theme.of(context).colorScheme.primary,
                               ),
@@ -351,7 +392,9 @@ class _HomePageState extends State<HomePage> {
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Token expires: ${_formatDateTime(_extendedInfo!.tokenExpiry!)}',
+                                      _isEnglish 
+                                          ? 'Token expires: ${_formatDateTime(_extendedInfo!.tokenExpiry!)}'
+                                          : 'Token ističe: ${_formatDateTime(_extendedInfo!.tokenExpiry!)}',
                                       style: TextStyle(
                                         fontSize: 13,
                                         color: Theme.of(context).colorScheme.primary,
@@ -369,7 +412,7 @@ class _HomePageState extends State<HomePage> {
                     ElevatedButton.icon(
                       onPressed: _getExtendedInfo,
                       icon: const Icon(Icons.info_outline),
-                      label: const Text('Get Extended Info'),
+                      label: Text(_isEnglish ? 'Get Extended Info' : 'Dohvati proširene podatke'),
                     ),
                   ],
                   
@@ -384,7 +427,7 @@ class _HomePageState extends State<HomePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Authentication Tokens',
+                            _isEnglish ? 'Authentication Tokens' : 'Autentifikacijski tokeni',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 16),
@@ -430,7 +473,9 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Token expires in: ${_getTimeUntilExpiry()}',
+                              _isEnglish 
+                                  ? 'Token expires in: ${_getTimeUntilExpiry()}'
+                                  : 'Token ističe za: ${_getTimeUntilExpiry()}',
                               style: TextStyle(
                                 color: _isTokenExpiringSoon()
                                     ? Theme.of(context).colorScheme.error
@@ -451,7 +496,7 @@ class _HomePageState extends State<HomePage> {
                       ElevatedButton.icon(
                         onPressed: _isLoading ? null : _refreshToken,
                         icon: const Icon(Icons.refresh),
-                        label: const Text('Refresh Token'),
+                        label: Text(_isEnglish ? 'Refresh Token' : 'Osvježi token'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.secondary,
                           foregroundColor: Theme.of(context).colorScheme.onSecondary,
@@ -461,7 +506,7 @@ class _HomePageState extends State<HomePage> {
                       ElevatedButton.icon(
                         onPressed: _isLoading ? null : _logout,
                         icon: const Icon(Icons.logout),
-                        label: const Text('Logout'),
+                        label: Text(_isEnglish ? 'Logout' : 'Odjava'),
                       ),
                     ],
                   ),
@@ -473,24 +518,26 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Not authenticated',
+                    _isEnglish ? 'Not authenticated' : 'Niste prijavljeni',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Sign in with your Croatian eID',
-                    style: TextStyle(color: Colors.grey),
+                  Text(
+                    _isEnglish 
+                        ? 'Sign in with your Croatian eID'
+                        : 'Prijavite se s hrvatskom osobnom iskaznicom',
+                    style: const TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _authenticate,
-                    icon: const Icon(Icons.login),
-                    label: const Text('Sign in with Certilia'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
+                  InkWell(
+                    onTap: _isLoading ? null : _authenticate,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset(
+                      _isEnglish 
+                          ? 'assets/images/sign_in_with_certilia.png'
+                          : 'assets/images/prijava_sa_certilia.png',
+                      height: 56,
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ],
@@ -574,22 +621,30 @@ class _HomePageState extends State<HomePage> {
   }
   
   String _getTimeUntilExpiry() {
-    if (_tokenExpiryTime == null) return 'Unknown';
+    if (_tokenExpiryTime == null) return _isEnglish ? 'Unknown' : 'Nepoznato';
     
     final timeUntilExpiry = _tokenExpiryTime!.difference(DateTime.now());
     
     if (timeUntilExpiry.isNegative) {
-      return 'Expired';
+      return _isEnglish ? 'Expired' : 'Istekao';
     }
     
     if (timeUntilExpiry.inDays > 0) {
-      return '${timeUntilExpiry.inDays} days';
+      return _isEnglish 
+          ? '${timeUntilExpiry.inDays} days'
+          : '${timeUntilExpiry.inDays} ${timeUntilExpiry.inDays == 1 ? 'dan' : 'dana'}';
     } else if (timeUntilExpiry.inHours > 0) {
-      return '${timeUntilExpiry.inHours} hours';
+      return _isEnglish 
+          ? '${timeUntilExpiry.inHours} hours'
+          : '${timeUntilExpiry.inHours} ${timeUntilExpiry.inHours == 1 ? 'sat' : timeUntilExpiry.inHours < 5 ? 'sata' : 'sati'}';
     } else if (timeUntilExpiry.inMinutes > 0) {
-      return '${timeUntilExpiry.inMinutes} minutes';
+      return _isEnglish 
+          ? '${timeUntilExpiry.inMinutes} minutes'
+          : '${timeUntilExpiry.inMinutes} ${timeUntilExpiry.inMinutes == 1 ? 'minuta' : timeUntilExpiry.inMinutes < 5 ? 'minute' : 'minuta'}';
     } else {
-      return '${timeUntilExpiry.inSeconds} seconds';
+      return _isEnglish 
+          ? '${timeUntilExpiry.inSeconds} seconds'
+          : '${timeUntilExpiry.inSeconds} ${timeUntilExpiry.inSeconds == 1 ? 'sekunda' : timeUntilExpiry.inSeconds < 5 ? 'sekunde' : 'sekundi'}';
     }
   }
   
@@ -635,12 +690,14 @@ class _HomePageState extends State<HomePage> {
                   Clipboard.setData(ClipboardData(text: token));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('$label copied to clipboard'),
+                      content: Text(_isEnglish 
+                          ? '$label copied to clipboard'
+                          : '$label kopiran u međuspremnik'),
                       duration: const Duration(seconds: 2),
                     ),
                   );
                 },
-                tooltip: 'Copy to clipboard',
+                tooltip: _isEnglish ? 'Copy to clipboard' : 'Kopiraj u međuspremnik',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 iconSize: 16,
