@@ -8,4 +8,5 @@ export 'src/certilia_universal_client.dart';
 export 'src/models/certilia_user.dart';
 export 'src/models/certilia_config.dart';
 export 'src/models/certilia_token.dart';
+export 'src/models/certilia_extended_info.dart';
 export 'src/exceptions/certilia_exception.dart';

@@ -15,6 +15,7 @@ import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
+import 'models/certilia_extended_info.dart';
 
 /// Web-specific client for Certilia OAuth authentication
 /// Uses popup window for authentication on web platform
@@ -843,6 +844,68 @@ class CertiliaWebClient {
       _log('Logout failed: $e');
       throw CertiliaException(
         message: 'Failed to logout',
+        details: e.toString(),
+      );
+    }
+  }
+
+  /// Get extended user information
+  /// This includes all available fields from Certilia API
+  Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
+    try {
+      // Check if we have a valid token
+      if (_currentToken == null) {
+        await _loadToken();
+      }
+
+      if (_currentToken == null || _currentToken!.isExpired) {
+        _log('No valid token available for extended info');
+        return null;
+      }
+
+      if (serverUrl == null) {
+        throw const CertiliaException(
+          message: 'Server URL is required for extended user info',
+        );
+      }
+
+      _log('Fetching extended user info');
+
+      final response = await _httpClient.get(
+        Uri.parse('$serverUrl/api/user/extended-info'),
+        headers: {
+          'Authorization': 'Bearer ${_currentToken!.accessToken}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _log('Extended user info fetched successfully');
+        _log('Available fields: ${data['availableFields']}');
+        return CertiliaExtendedInfo.fromJson(data);
+      } else if (response.statusCode == 401) {
+        _log('Token expired or invalid, trying to refresh');
+        if (_currentToken!.refreshToken != null) {
+          await refreshToken();
+          // Retry with new token
+          return getExtendedUserInfo();
+        }
+        return null;
+      } else {
+        _log('Failed to fetch extended user info: ${response.statusCode}');
+        throw CertiliaNetworkException(
+          message: 'Failed to fetch extended user info',
+          statusCode: response.statusCode,
+          details: response.body,
+        );
+      }
+    } catch (e) {
+      _log('Error fetching extended user info: $e');
+      if (e is CertiliaException) {
+        rethrow;
+      }
+      throw CertiliaException(
+        message: 'Failed to fetch extended user info',
         details: e.toString(),
       );
     }

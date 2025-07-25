@@ -5,6 +5,7 @@ import 'certilia_client_stub.dart'
     if (dart.library.html) 'certilia_web_client.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_user.dart';
+import 'models/certilia_extended_info.dart';
 
 /// Universal client that automatically uses the appropriate implementation
 /// based on the platform (WebView for mobile, popup for web)
@@ -43,6 +44,11 @@ class CertiliaUniversalClient {
   /// Logs out the user
   Future<void> logout() async {
     await _platformClient.logout();
+  }
+
+  /// Gets extended user information
+  Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
+    return await _platformClient.getExtendedUserInfo();
   }
 
   /// Disposes of resources
