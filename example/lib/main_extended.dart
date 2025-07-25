@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_certilia/flutter_certilia.dart';
 
 void main() {
@@ -34,6 +35,7 @@ class _HomePageState extends State<HomePage> {
   CertiliaExtendedInfo? _extendedInfo;
   bool _isLoading = false;
   String? _error;
+  DateTime? _tokenExpiryTime;
 
   @override
   void initState() {
@@ -116,11 +118,46 @@ class _HomePageState extends State<HomePage> {
       final extendedInfo = await _certilia.getExtendedUserInfo();
       setState(() {
         _extendedInfo = extendedInfo;
+        _tokenExpiryTime = extendedInfo?.tokenExpiry;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
         _error = 'Failed to get extended info: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _refreshToken() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await _certilia.refreshToken();
+      setState(() {
+        _isLoading = false;
+      });
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Token refreshed successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Refresh user data with new token
+      await _checkAuthStatus();
+      await _getExtendedInfo();
+    } catch (e) {
+      setState(() {
+        _error = 'Token refresh failed: $e';
         _isLoading = false;
       });
     }
@@ -333,11 +370,97 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                   
-                  const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _logout,
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Logout'),
+                  const SizedBox(height: 16),
+                  
+                  // Token display section
+                  Card(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Authentication Tokens',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 16),
+                          // Access Token
+                          _buildTokenRow(
+                            context,
+                            'Access Token',
+                            _certilia.currentAccessToken,
+                            Icons.key,
+                          ),
+                          const SizedBox(height: 12),
+                          // Refresh Token
+                          _buildTokenRow(
+                            context,
+                            'Refresh Token',
+                            _certilia.currentRefreshToken,
+                            Icons.refresh,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Token status info
+                  if (_tokenExpiryTime != null) ...[
+                    Card(
+                      color: _isTokenExpiringSoon() 
+                          ? Theme.of(context).colorScheme.errorContainer
+                          : Theme.of(context).colorScheme.secondaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              size: 20,
+                              color: _isTokenExpiringSoon()
+                                  ? Theme.of(context).colorScheme.error
+                                  : Theme.of(context).colorScheme.secondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Token expires in: ${_getTimeUntilExpiry()}',
+                              style: TextStyle(
+                                color: _isTokenExpiringSoon()
+                                    ? Theme.of(context).colorScheme.error
+                                    : Theme.of(context).colorScheme.onSecondaryContainer,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _refreshToken,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh Token'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.secondary,
+                          foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _logout,
+                        icon: const Icon(Icons.logout),
+                        label: const Text('Logout'),
+                      ),
+                    ],
                   ),
                 ] else ...[
                   const Icon(
@@ -439,6 +562,100 @@ class _HomePageState extends State<HomePage> {
   String _formatDateTime(DateTime dateTime) {
     final local = dateTime.toLocal();
     return '${local.day}.${local.month}.${local.year} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+  
+  bool _isTokenExpiringSoon() {
+    if (_tokenExpiryTime == null) return false;
+    final timeUntilExpiry = _tokenExpiryTime!.difference(DateTime.now());
+    return timeUntilExpiry.inMinutes < 5; // Consider expiring soon if less than 5 minutes
+  }
+  
+  String _getTimeUntilExpiry() {
+    if (_tokenExpiryTime == null) return 'Unknown';
+    
+    final timeUntilExpiry = _tokenExpiryTime!.difference(DateTime.now());
+    
+    if (timeUntilExpiry.isNegative) {
+      return 'Expired';
+    }
+    
+    if (timeUntilExpiry.inDays > 0) {
+      return '${timeUntilExpiry.inDays} days';
+    } else if (timeUntilExpiry.inHours > 0) {
+      return '${timeUntilExpiry.inHours} hours';
+    } else if (timeUntilExpiry.inMinutes > 0) {
+      return '${timeUntilExpiry.inMinutes} minutes';
+    } else {
+      return '${timeUntilExpiry.inSeconds} seconds';
+    }
+  }
+  
+  Widget _buildTokenRow(
+    BuildContext context,
+    String label,
+    String? token,
+    IconData icon,
+  ) {
+    if (token == null) return const SizedBox.shrink();
+    
+    final truncatedToken = token.length > 50 
+        ? '${token.substring(0, 20)}...${token.substring(token.length - 20)}' 
+        : token;
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).dividerColor,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 16),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: token));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$label copied to clipboard'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                tooltip: 'Copy to clipboard',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                iconSize: 16,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SelectableText(
+            truncatedToken,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

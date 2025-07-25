@@ -787,8 +787,12 @@ class CertiliaWebClient {
         Uri.parse('$serverUrl/api/auth/refresh'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${_currentToken!.refreshToken}',
+          // Include current access token so server can extract certilia tokens
+          'Authorization': 'Bearer ${_currentToken!.accessToken}',
         },
+        body: jsonEncode({
+          'refresh_token': _currentToken!.refreshToken,
+        }),
       );
 
       if (response.statusCode != 200) {
@@ -987,6 +991,18 @@ class CertiliaWebClient {
       }
     }
   }
+
+  /// Gets the current access token
+  String? get currentAccessToken => _currentToken?.accessToken;
+  
+  /// Gets the current refresh token
+  String? get currentRefreshToken => _currentToken?.refreshToken;
+  
+  /// Gets the current ID token
+  String? get currentIdToken => _currentToken?.idToken;
+  
+  /// Gets the token expiry time
+  DateTime? get tokenExpiry => _currentToken?.expiresAt;
 
   /// Disposes of resources
   void dispose() {

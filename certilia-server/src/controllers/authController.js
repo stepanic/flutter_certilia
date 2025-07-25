@@ -372,15 +372,36 @@ export const refreshToken = async (req, res, next) => {
     // Verify and decode refresh token
     const decoded = tokenService.verifyToken(refresh_token, 'refresh');
 
-    // In a real app, you might want to check if the user still exists
-    // and fetch fresh user data from database
+    // Check if this is our JWT refresh token
+    // Get the current access token to extract certilia tokens
+    const authHeader = req.headers.authorization;
+    const accessToken = tokenService.extractTokenFromHeader(authHeader);
+    
+    let certiliaTokens = null;
+    if (accessToken) {
+      try {
+        const accessDecoded = tokenService.decodeToken(accessToken);
+        certiliaTokens = accessDecoded.certilia_tokens;
+      } catch (e) {
+        logger.warn('Could not decode access token for certilia tokens');
+      }
+    }
 
-    // Generate new token pair
-    const tokens = tokenService.generateTokenPair({
+    // Generate new token pair, preserving certilia tokens
+    const userData = {
       sub: decoded.sub,
-    });
+    };
+    
+    if (certiliaTokens) {
+      userData.certilia_tokens = certiliaTokens;
+    }
+    
+    const tokens = tokenService.generateTokenPair(userData);
 
-    logger.info('Token refreshed', { userId: decoded.sub });
+    logger.info('Token refreshed', { 
+      userId: decoded.sub,
+      hasCertiliaTokens: !!certiliaTokens 
+    });
 
     res.json(tokens);
   } catch (error) {

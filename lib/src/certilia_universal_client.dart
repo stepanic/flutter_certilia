@@ -50,6 +50,18 @@ class CertiliaUniversalClient {
   Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
     return await _platformClient.getExtendedUserInfo();
   }
+  
+  /// Gets the current access token
+  String? get currentAccessToken => _platformClient.currentAccessToken;
+  
+  /// Gets the current refresh token
+  String? get currentRefreshToken => _platformClient.currentRefreshToken;
+  
+  /// Gets the current ID token
+  String? get currentIdToken => _platformClient.currentIdToken;
+  
+  /// Gets the token expiry time
+  DateTime? get tokenExpiry => _platformClient.tokenExpiry;
 
   /// Disposes of resources
   void dispose() {
