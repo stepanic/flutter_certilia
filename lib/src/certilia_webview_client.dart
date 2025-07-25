@@ -43,6 +43,23 @@ class CertiliaWebViewClient {
   })  : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
         _httpClient = httpClient ?? http.Client() {
     config.validate();
+    // Load saved tokens on initialization
+    _initializeTokens();
+  }
+  
+  /// Initialize tokens from storage
+  Future<void> _initializeTokens() async {
+    try {
+      await _loadToken();
+      if (_currentToken != null && !_currentToken!.isExpired) {
+        _log('Loaded saved authentication token');
+      } else if (_currentToken != null && _currentToken!.isExpired) {
+        _log('Saved token is expired');
+        // Don't automatically refresh here - let the app decide
+      }
+    } catch (e) {
+      _log('Failed to load saved tokens: $e');
+    }
   }
 
   /// Authenticates the user using WebView and returns their profile
@@ -489,6 +506,18 @@ class CertiliaWebViewClient {
       }
     }
   }
+
+  /// Gets the current access token
+  String? get currentAccessToken => _currentToken?.accessToken;
+  
+  /// Gets the current refresh token
+  String? get currentRefreshToken => _currentToken?.refreshToken;
+  
+  /// Gets the current ID token
+  String? get currentIdToken => _currentToken?.idToken;
+  
+  /// Gets the token expiry time
+  DateTime? get tokenExpiry => _currentToken?.expiresAt;
 
   /// Disposes of resources
   void dispose() {
