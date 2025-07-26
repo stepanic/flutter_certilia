@@ -278,18 +278,38 @@ class CertiliaWebClient {
             if (!completer.isCompleted) {
               completer.complete(data['result']['code']);
             }
-            try {
-              popup.close();
-            } catch (_) {}
+            // Try multiple methods to close the popup
+            // Add small delay to ensure browser is ready
+            Timer(const Duration(milliseconds: 100), () {
+              try {
+                _log('Attempting to close popup...');
+                popup.close();
+                _log('popup.close() called successfully');
+              } catch (e) {
+                _log('popup.close() failed: $e');
+              }
+              // Try closing again after a short delay
+              Timer(const Duration(milliseconds: 200), () {
+                try {
+                  popup.close();
+                  _log('Second popup.close() attempt');
+                } catch (_) {
+                  _log('Second popup.close() attempt failed');
+                }
+              });
+            });
           } else if (data['status'] == 'error') {
             _log('Authentication failed: ${data['error']}');
             cleanup();
             if (!completer.isCompleted) {
               completer.complete(null);
             }
-            try {
-              popup.close();
-            } catch (_) {}
+            // Close popup on error
+            Timer(const Duration(milliseconds: 100), () {
+              try {
+                popup.close();
+              } catch (_) {}
+            });
           }
         } else if (response.statusCode == 404) {
           _log('Polling session expired or not found');

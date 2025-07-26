@@ -69,6 +69,8 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
+// Also serve files from src/public (for callback.js)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Special handling for .well-known files (must be served with correct content-type)
 app.get('/.well-known/apple-app-site-association', (req, res) => {

@@ -108,12 +108,11 @@
                 
                 // Auto-close popup after sending message
                 if (sent) {
-                    console.log('Closing popup immediately...');
-                    try {
+                    console.log('Closing popup in 100ms...');
+                    setTimeout(() => {
+                        console.log('Attempting to close window...');
                         window.close();
-                    } catch (e) {
-                        console.error('Could not close window:', e);
-                    }
+                    }, 100);
                 }
             } catch (e) {
                 console.error('Failed to send message to opener:', e);
@@ -162,14 +161,17 @@
     // Auto-close window for polling approach
     if (!window.opener || window.opener === window) {
         console.log('No opener detected - using polling approach');
-        console.log('Attempting to close window immediately...');
+        console.log('Window will close automatically in 3 seconds...');
         
-        try {
-            window.close();
-        } catch (e) {
-            console.error('Could not close window:', e);
-            console.log('User may need to close this window manually');
-        }
+        setTimeout(() => {
+            console.log('Attempting to close window...');
+            try {
+                window.close();
+            } catch (e) {
+                console.error('Could not close window:', e);
+                console.log('User may need to close this window manually');
+            }
+        }, 3000);
     }
 })();
 
