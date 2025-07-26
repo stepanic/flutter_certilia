@@ -159,3 +159,77 @@
         }, 3000);
     }
 })();
+
+// Function for close button
+function closeWindow() {
+    console.log('closeWindow function called');
+    
+    // Try various methods to close the window
+    try {
+        // Method 1: Standard window.close()
+        if (window.close) {
+            console.log('Trying window.close()');
+            window.close();
+        }
+    } catch (e) {
+        console.error('window.close() failed:', e);
+    }
+    
+    // Method 2: History navigation for in-app browsers
+    try {
+        if (window.history && window.history.length > 1) {
+            console.log('Trying history.back()');
+            window.history.back();
+        }
+    } catch (e) {
+        console.error('history.back() failed:', e);
+    }
+    
+    // Method 3: Try going back in history with delay
+    setTimeout(() => {
+        if (!window.closed) {
+            try {
+                console.log('Trying history.go(-1)');
+                window.history.go(-1);
+            } catch (e) {
+                console.error('history.go(-1) failed:', e);
+            }
+            
+            // Method 4: For Android Chrome Custom Tabs, try to navigate to about:blank
+            try {
+                console.log('Trying to navigate to about:blank');
+                window.location.href = 'about:blank';
+            } catch (e) {
+                console.error('Navigate to about:blank failed:', e);
+            }
+            
+            // If nothing works, show a message
+            setTimeout(() => {
+                const container = document.querySelector('.container');
+                if (container && !window.closed) {
+                    console.log('All close methods failed, showing manual instruction');
+                    container.innerHTML = `
+                        <div class="icon success">✓</div>
+                        <h1>Authentication Complete</h1>
+                        <p>Please use the back button to return to the app.</p>
+                    `;
+                }
+            }, 500);
+        }
+    }, 100);
+}
+
+// Attach event listener to close button when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    const closeBtn = document.getElementById('closeWindowBtn');
+    if (closeBtn) {
+        console.log('Close button found, attaching event listener');
+        closeBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Close button clicked');
+            closeWindow();
+        });
+    } else {
+        console.log('Close button not found in DOM');
+    }
+});

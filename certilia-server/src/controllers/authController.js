@@ -204,6 +204,7 @@ export const handleCallback = async (req, res, next) => {
       buttonText: '',
       buttonLink: '/',
       deepLink: null, // Could be configured for specific apps
+      showCloseButton: true, // Always show close button for successful auth
     };
 
     logger.info('Rendering success callback template with data:', templateData);
@@ -219,7 +220,7 @@ export const handleCallback = async (req, res, next) => {
       logger.info('Updated polling session for state:', state);
     }
 
-    // For mobile apps, return an HTML page that can be parsed
+    // For all authentication callbacks, return the template
     res.send(renderCallbackTemplate(templateData));
   } catch (error) {
     next(error);

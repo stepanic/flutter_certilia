@@ -1,11 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Internet permission for OAuth -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Keep app running in background during OAuth -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     
     <application
         android:label="flutter_certilia_example"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"

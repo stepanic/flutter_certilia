@@ -29,8 +29,8 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
-        // For flutter_appauth
-        manifestPlaceholders["appAuthRedirectScheme"] = "com.example.flutter_certilia_example"
+        // For flutter_appauth - custom scheme
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.example.certilia"
     }
 
     buildTypes {

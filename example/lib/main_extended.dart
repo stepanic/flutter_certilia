@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_certilia/flutter_certilia.dart';
@@ -45,7 +46,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _initializeCertilia() {
-    // Configuration for server-based authentication
+    // Configuration for authentication
+    // Using HTTPS redirect URL with polling approach
     const config = CertiliaConfig(
       clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
       redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',

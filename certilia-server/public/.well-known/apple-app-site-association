@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAM_ID.com.example.flutterCertiliaExample",
+        "paths": ["/api/auth/callback*"]
+      }
+    ]
+  }
+}

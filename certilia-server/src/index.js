@@ -68,7 +68,18 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Serve static files from public directory
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Special handling for .well-known files (must be served with correct content-type)
+app.get('/.well-known/apple-app-site-association', (req, res) => {
+  res.type('application/json');
+  res.sendFile(path.join(__dirname, '../public/.well-known/apple-app-site-association'));
+});
+
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.type('application/json');
+  res.sendFile(path.join(__dirname, '../public/.well-known/assetlinks.json'));
+});
 
 // Request logging
 app.use((req, res, next) => {

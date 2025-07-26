@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'certilia_client_stub.dart'
-    if (dart.library.io) 'certilia_webview_client.dart'
+    if (dart.library.io) 'certilia_manual_oauth_client.dart'
     if (dart.library.html) 'certilia_web_client.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_user.dart';

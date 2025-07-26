@@ -96,6 +96,18 @@
             background-color: #2563eb;
         }
         
+        .close-button {
+            margin-top: 12px;
+            background-color: #6b7280;
+            cursor: pointer;
+            border: none;
+            font-size: 16px;
+        }
+        
+        .close-button:hover {
+            background-color: #4b5563;
+        }
+        
         .error-details {
             background-color: #fef2f2;
             border: 1px solid #fecaca;
@@ -149,6 +161,10 @@
         
         {{#if showButton}}
         <a href="{{buttonLink}}" class="button">{{buttonText}}</a>
+        {{/if}}
+        
+        {{#if showCloseButton}}
+        <button class="button close-button" id="closeWindowBtn">Close Window</button>
         {{/if}}
     </div>
     
