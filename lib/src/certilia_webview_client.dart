@@ -683,6 +683,35 @@ class _CertiliaWebViewScreenState extends State<_CertiliaWebViewScreen> {
           },
           onPageFinished: (String url) {
             _checkForCallback(url);
+            // Inject CSS to zoom the page to 80%
+            _controller.runJavaScript('''
+              // Add viewport meta tag if not exists
+              var viewport = document.querySelector('meta[name="viewport"]');
+              if (!viewport) {
+                viewport = document.createElement('meta');
+                viewport.name = 'viewport';
+                viewport.content = 'width=device-width, initial-scale=0.8, maximum-scale=5.0, user-scalable=yes';
+                document.head.appendChild(viewport);
+              }
+              
+              // Add CSS for zoom
+              var style = document.createElement('style');
+              style.innerHTML = `
+                html {
+                  zoom: 0.8;
+                  -webkit-transform: scale(0.8);
+                  -webkit-transform-origin: 0 0;
+                  -moz-transform: scale(0.8);
+                  -moz-transform-origin: 0 0;
+                  transform: scale(0.8);
+                  transform-origin: 0 0;
+                }
+                body {
+                  width: 125%; /* Compensate for 0.8 scale */
+                }
+              `;
+              document.head.appendChild(style);
+            ''');
           },
           onNavigationRequest: (NavigationRequest request) {
             if (_checkForCallback(request.url)) {
