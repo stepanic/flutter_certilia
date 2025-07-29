@@ -29,7 +29,7 @@ stop_previous() {
 
 # Parse arguments
 DEVICE="ZY22G9DDR3"
-TARGET="lib/main_extended.dart"
+TARGET="lib/main.dart"
 COMMAND="run"
 
 while [[ $# -gt 0 ]]; do
