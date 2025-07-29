@@ -6,7 +6,6 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'constants.dart';
 import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_token.dart';
@@ -56,9 +55,9 @@ class CertiliaClient {
           config.redirectUrl,
           discoveryUrl: config.discoveryUrl,
           serviceConfiguration: config.discoveryUrl == null
-              ? const AuthorizationServiceConfiguration(
-                  authorizationEndpoint: CertiliaConstants.authorizationEndpoint,
-                  tokenEndpoint: CertiliaConstants.tokenEndpoint,
+              ? AuthorizationServiceConfiguration(
+                  authorizationEndpoint: config.authorizationEndpoint,
+                  tokenEndpoint: config.tokenEndpoint,
                 )
               : null,
           scopes: config.scopes,
@@ -90,7 +89,7 @@ class CertiliaClient {
         refreshToken: result.refreshToken,
         idToken: result.idToken,
         expiresAt: result.accessTokenExpirationDateTime,
-        tokenType: result.tokenType ?? CertiliaConstants.defaultTokenType,
+        tokenType: result.tokenType ?? 'Bearer',
       );
 
       // Save token
@@ -165,9 +164,9 @@ class CertiliaClient {
           config.redirectUrl,
           discoveryUrl: config.discoveryUrl,
           serviceConfiguration: config.discoveryUrl == null
-              ? const AuthorizationServiceConfiguration(
-                  authorizationEndpoint: CertiliaConstants.authorizationEndpoint,
-                  tokenEndpoint: CertiliaConstants.tokenEndpoint,
+              ? AuthorizationServiceConfiguration(
+                  authorizationEndpoint: config.authorizationEndpoint,
+                  tokenEndpoint: config.tokenEndpoint,
                 )
               : null,
           refreshToken: _currentToken!.refreshToken,
@@ -196,7 +195,7 @@ class CertiliaClient {
         refreshToken: result.refreshToken ?? _currentToken!.refreshToken,
         idToken: result.idToken,
         expiresAt: result.accessTokenExpirationDateTime,
-        tokenType: result.tokenType ?? CertiliaConstants.defaultTokenType,
+        tokenType: result.tokenType ?? 'Bearer',
       );
 
       // Save updated token
@@ -253,9 +252,9 @@ class CertiliaClient {
           postLogoutRedirectUrl: config.redirectUrl,
           discoveryUrl: config.discoveryUrl,
           serviceConfiguration: config.discoveryUrl == null
-              ? const AuthorizationServiceConfiguration(
-                  authorizationEndpoint: CertiliaConstants.authorizationEndpoint,
-                  tokenEndpoint: CertiliaConstants.tokenEndpoint,
+              ? AuthorizationServiceConfiguration(
+                  authorizationEndpoint: config.authorizationEndpoint,
+                  tokenEndpoint: config.tokenEndpoint,
                 )
               : null,
         ),
@@ -281,7 +280,7 @@ class CertiliaClient {
   Future<CertiliaUser> _fetchUserInfo(String accessToken) async {
     try {
       final response = await _httpClient.get(
-        Uri.parse(CertiliaConstants.userInfoEndpoint),
+        Uri.parse(config.userInfoEndpoint),
         headers: {
           'Authorization': 'Bearer $accessToken',
           'User-Agent': config.userAgent,

@@ -8,7 +8,6 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'constants.dart';
 import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_extended_info.dart';
@@ -79,8 +78,8 @@ class CertiliaAppAuthClient {
 
       // Build OAuth endpoints - for AppAuth we need to use direct Certilia endpoints
       // We'll use manual endpoints instead of discovery since Certilia's discovery might not be standard
-      final authorizationEndpoint = CertiliaConstants.authorizationEndpoint;
-      final tokenEndpoint = CertiliaConstants.tokenEndpoint;
+      final authorizationEndpoint = config.authorizationEndpoint;
+      final tokenEndpoint = config.tokenEndpoint;
       
       _log('Authorization endpoint: $authorizationEndpoint');
       _log('Token endpoint: $tokenEndpoint');
@@ -113,7 +112,7 @@ class CertiliaAppAuthClient {
         refreshToken: result.refreshToken,
         idToken: result.idToken,
         expiresAt: result.accessTokenExpirationDateTime,
-        tokenType: result.tokenType ?? CertiliaConstants.defaultTokenType,
+        tokenType: result.tokenType ?? 'Bearer',
       );
 
       // Save token
@@ -234,14 +233,14 @@ class CertiliaAppAuthClient {
       _log('Refreshing token');
 
       // Use manual endpoints for token refresh
-      final tokenEndpoint = CertiliaConstants.tokenEndpoint;
+      final tokenEndpoint = config.tokenEndpoint;
 
       final result = await _appAuth.token(
         TokenRequest(
           config.clientId,
           config.redirectUrl,
           serviceConfiguration: AuthorizationServiceConfiguration(
-            authorizationEndpoint: CertiliaConstants.authorizationEndpoint,
+            authorizationEndpoint: config.authorizationEndpoint,
             tokenEndpoint: tokenEndpoint,
           ),
           refreshToken: _currentToken!.refreshToken,
@@ -255,7 +254,7 @@ class CertiliaAppAuthClient {
         refreshToken: result.refreshToken ?? _currentToken!.refreshToken,
         idToken: result.idToken,
         expiresAt: result.accessTokenExpirationDateTime,
-        tokenType: result.tokenType ?? CertiliaConstants.defaultTokenType,
+        tokenType: result.tokenType ?? 'Bearer',
       );
 
       // Save updated token
@@ -405,7 +404,7 @@ class CertiliaAppAuthClient {
   /// Fetches user information from the server
   Future<CertiliaUser> _fetchUserInfo(String accessToken) async {
     // Always use direct Certilia endpoint for AppAuth
-    final userInfoEndpoint = CertiliaConstants.userInfoEndpoint;
+    final userInfoEndpoint = config.userInfoEndpoint;
 
     final response = await _httpClient.get(
       Uri.parse(userInfoEndpoint),

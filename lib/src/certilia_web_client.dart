@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'constants.dart';
 import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_token.dart';
@@ -112,7 +111,7 @@ class CertiliaWebClient {
         expiresAt: tokenData['expiresIn'] != null
             ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
             : null,
-        tokenType: tokenData['tokenType'] ?? CertiliaConstants.defaultTokenType,
+        tokenType: tokenData['tokenType'] ?? 'Bearer',
       );
 
       // Save token
@@ -858,7 +857,7 @@ class CertiliaWebClient {
         expiresAt: tokenData['expiresIn'] != null
             ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
             : null,
-        tokenType: tokenData['tokenType'] ?? CertiliaConstants.defaultTokenType,
+        tokenType: tokenData['tokenType'] ?? 'Bearer',
       );
 
       // Save updated token
@@ -981,7 +980,7 @@ class CertiliaWebClient {
     if (serverUrl == null) {
       // Direct API call to Certilia
       final response = await _httpClient.get(
-        Uri.parse(CertiliaConstants.userInfoEndpoint),
+        Uri.parse(config.userInfoEndpoint),
         headers: {
           'Authorization': 'Bearer $accessToken',
           'User-Agent': config.userAgent,

@@ -10,7 +10,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'constants.dart';
 import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_extended_info.dart';
@@ -200,7 +199,7 @@ class CertiliaManualOAuthClient {
         expiresAt: tokenData['expiresIn'] != null
             ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
             : null,
-        tokenType: tokenData['tokenType'] ?? CertiliaConstants.defaultTokenType,
+        tokenType: tokenData['tokenType'] ?? 'Bearer',
       );
       
       // Save token
@@ -485,7 +484,7 @@ class CertiliaManualOAuthClient {
         expiresAt: tokenData['expiresIn'] != null
             ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
             : null,
-        tokenType: tokenData['tokenType'] ?? CertiliaConstants.defaultTokenType,
+        tokenType: tokenData['tokenType'] ?? 'Bearer',
       );
       
       // Save updated token

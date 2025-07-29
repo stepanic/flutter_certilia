@@ -1,3 +1,4 @@
+export 'src/certilia_sdk.dart';
 export 'src/certilia_client.dart';
 export 'src/certilia_webview_client.dart' hide CertiliaPlatformClient;
 // Only export web client on web platform

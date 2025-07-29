@@ -12,7 +12,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Certilia Extended Info Example',
+      title: 'Certilia SDK Example',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
@@ -30,10 +30,11 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late final CertiliaUniversalClient _certilia;
+  dynamic _certilia; // Dynamic type to support all client types
   CertiliaUser? _user;
   CertiliaExtendedInfo? _extendedInfo;
   bool _isLoading = false;
+  bool _isInitialized = false;
   String? _error;
   DateTime? _tokenExpiryTime;
   bool _isEnglish = false; // Default to Croatian
@@ -41,30 +42,61 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _initializeCertilia();
+    _initializeSDK();
   }
 
-  void _initializeCertilia() {
-    // Configuration for authentication
-    // Using HTTPS redirect URL with polling approach
-    const config = CertiliaConfig(
-      clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
-      redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
-      scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
-      enableLogging: true,
-    );
-
-    _certilia = CertiliaUniversalClient(
-      config: config,
-      serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
-    );
-    // Give time for async token loading to complete
-    Future.delayed(const Duration(milliseconds: 100), () {
-      _checkAuthStatus();
+  /// Initialize the SDK with all parameters directly (no .env required)
+  Future<void> _initializeSDK() async {
+    setState(() {
+      _isLoading = true;
     });
+
+    try {
+      // Full configuration with all parameters using CertiliaSDK
+      final config = CertiliaConfig(
+        // Core OAuth parameters
+        clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
+        redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
+        
+        // OAuth endpoints
+        baseUrl: 'https://idp.test.certilia.com',
+        authorizationEndpoint: 'https://idp.test.certilia.com/oauth2/authorize',
+        tokenEndpoint: 'https://idp.test.certilia.com/oauth2/token',
+        userInfoEndpoint: 'https://idp.test.certilia.com/oauth2/userinfo',
+        
+        // Optional parameters
+        clientSecret: null, // Not needed for mobile apps
+        serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app', // For web/webview
+        scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
+        enableLogging: true,
+        preferEphemeralSession: true,
+        sessionTimeout: 3600000, // 1 hour
+        refreshTokenTimeout: 2592000000, // 30 days
+      );
+
+      // Initialize using CertiliaSDK - it returns dynamic type
+      _certilia = await CertiliaSDK.initialize(config: config);
+
+      setState(() {
+        _isInitialized = true;
+        _isLoading = false;
+      });
+
+      // Give time for async token loading to complete
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _checkAuthStatus();
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _error = 'Failed to initialize SDK: $e';
+      });
+    }
   }
 
   Future<void> _checkAuthStatus() async {
+    if (!_isInitialized) return;
+    
     // Check authentication status (loads from storage if needed)
     final isAuth = await _certilia.checkAuthenticationStatus();
     
@@ -98,6 +130,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _authenticate() async {
+    if (!_isInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please wait for SDK initialization')),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -136,7 +175,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _getExtendedInfo() async {
-    if (!mounted) return;
+    if (!mounted || !_isInitialized) return;
     
     setState(() {
       _isLoading = true;
@@ -176,6 +215,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _refreshToken() async {
+    if (!_isInitialized) return;
+    
     setState(() {
       _isLoading = true;
       _error = null;
@@ -195,7 +236,7 @@ class _HomePageState extends State<HomePage> {
                 ? 'Token refreshed successfully'
                 : 'Token uspješno osvježen'),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -212,7 +253,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _logout() async {
-    if (!mounted) return;
+    if (!_isInitialized) return;
     
     setState(() {
       _isLoading = true;
@@ -243,7 +284,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Certilia Extended Info Example'),
+        title: const Text('Certilia SDK Example'),
       ),
       body: Center(
         child: Padding(
@@ -286,7 +327,14 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                if (_user != null) ...[
+                if (!_isInitialized) ...[
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    _isEnglish ? 'Initializing SDK...' : 'Inicijalizacija SDK-a...',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ] else if (_user != null) ...[
                   const Icon(
                     Icons.check_circle,
                     color: Colors.green,
@@ -580,12 +628,20 @@ class _HomePageState extends State<HomePage> {
                   InkWell(
                     onTap: _isLoading ? null : _authenticate,
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      _isEnglish 
-                          ? 'assets/images/sign_in_with_certilia.png'
-                          : 'assets/images/prijava_sa_certilia.png',
-                      width: 256,
-                      fit: BoxFit.contain,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _isEnglish ? 'Sign in with Certilia' : 'Prijavite se s Certilia',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -768,7 +824,9 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    _certilia.dispose();
+    if (_isInitialized) {
+      _certilia.dispose();
+    }
     super.dispose();
   }
 }
