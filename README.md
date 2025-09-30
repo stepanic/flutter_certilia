@@ -34,19 +34,41 @@ flutter pub get
 
 ## Usage
 
-### Basic Example
+### Recommended: Client-Server Architecture
+
+For production applications, we recommend using a backend proxy server:
 
 ```dart
 import 'package:flutter_certilia/flutter_certilia.dart';
 
-// Configure the client
-final config = CertiliaConfig(
+// Simple configuration - Flutter only knows about YOUR server
+final certilia = await CertiliaSDKSimple.initialize(
   clientId: 'your_client_id',
-  redirectUrl: 'com.example.app://callback',
+  serverUrl: 'https://your-backend-server.com',
   scopes: ['openid', 'profile', 'eid'],
 );
 
-// Create client instance
+// Authenticate
+final user = await certilia.authenticate(context);
+```
+
+Benefits:
+- ✅ API credentials stay secure on your server
+- ✅ Simplified Flutter client configuration
+- ✅ Centralized OAuth flow management
+- ✅ Better security and control
+
+### Alternative: Direct Integration
+
+```dart
+// Direct configuration (not recommended for production)
+final config = CertiliaConfig(
+  clientId: 'your_client_id',
+  redirectUrl: 'com.example.app://callback',
+  baseUrl: 'https://idp.test.certilia.com',
+  // ... other API endpoints
+);
+
 final certilia = CertiliaClient(config: config);
 
 // Authenticate user

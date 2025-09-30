@@ -45,37 +45,22 @@ class _HomePageState extends State<HomePage> {
     _initializeSDK();
   }
 
-  /// Initialize the SDK with all parameters directly (no .env required)
+  /// Initialize the SDK with simplified client configuration
   Future<void> _initializeSDK() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Full configuration with all parameters using CertiliaSDK
-      final config = CertiliaConfig(
-        // Core OAuth parameters
+      // Simple client configuration - only what the Flutter client needs to know
+      // The backend server handles all OAuth communication with Certilia API
+      _certilia = await CertiliaSDKSimple.initialize(
         clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
-        redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
-        
-        // OAuth endpoints
-        baseUrl: 'https://idp.test.certilia.com',
-        authorizationEndpoint: 'https://idp.test.certilia.com/oauth2/authorize',
-        tokenEndpoint: 'https://idp.test.certilia.com/oauth2/token',
-        userInfoEndpoint: 'https://idp.test.certilia.com/oauth2/userinfo',
-        
-        // Optional parameters
-        clientSecret: null, // Not needed for mobile apps
-        serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app', // For web/webview
+        serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
         scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
         enableLogging: true,
-        preferEphemeralSession: true,
         sessionTimeout: 3600000, // 1 hour
-        refreshTokenTimeout: 2592000000, // 30 days
       );
-
-      // Initialize using CertiliaSDK - it returns dynamic type
-      _certilia = await CertiliaSDK.initialize(config: config);
 
       setState(() {
         _isInitialized = true;

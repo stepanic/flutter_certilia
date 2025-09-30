@@ -73,10 +73,13 @@ dependencies:
   certilia_sdk: ^1.0.0
 ```
 
-#### Basic Usage
+#### Basic Usage (Client-Server Architecture)
 ```dart
-// 1. Initialize (auto-loads .env)
-final certilia = await CertiliaSDK.initialize();
+// 1. Initialize - Flutter client only needs to know about YOUR server
+final certilia = await CertiliaSDKSimple.initialize(
+  clientId: 'your_client_id',
+  serverUrl: 'https://your-backend-server.com',
+);
 
 // 2. Authenticate
 final user = await certilia.authenticate();
@@ -88,14 +91,15 @@ print('Welcome ${user.fullName}');
 await certilia.logout();
 ```
 
-#### Advanced Usage
+#### Advanced Usage (Direct Certilia Integration)
 ```dart
-// Custom configuration
+// For direct integration without backend proxy (not recommended)
 final certilia = await CertiliaSDK.initialize(
-  configPath: 'assets/.env.production',
   config: CertiliaConfig(
-    clientId: 'override_client_id',
-    enableLogging: true,
+    clientId: 'your_client_id',
+    redirectUrl: 'com.example.app://callback',
+    baseUrl: 'https://idp.test.certilia.com',
+    // ... other Certilia API endpoints
   ),
 );
 

@@ -1,6 +1,18 @@
 # flutter_certilia Example
 
-This example demonstrates how to use the flutter_certilia SDK with direct parameter configuration (no .env files required).
+This example demonstrates how to use the flutter_certilia SDK in a clean client-server architecture.
+
+## Architecture
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Flutter Client │────▶│  Backend Server  │────▶│  Certilia API   │
+│                 │◀────│  (Node.js Proxy) │◀────│                 │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+        
+Flutter knows only      Server handles all       Official OAuth
+about YOUR server      OAuth communication      Provider
+```
 
 ## Features
 
@@ -42,31 +54,23 @@ flutter run -d <device_id>
 
 ## SDK Configuration
 
-The example demonstrates how to initialize CertiliaSDK with all parameters:
+The example demonstrates the simplified client-server architecture where the Flutter client only needs to know about your backend server:
 
 ```dart
-final config = CertiliaConfig(
-  // Core OAuth parameters
+// Simple client configuration - Flutter only needs to know about YOUR server
+final client = await CertiliaSDKSimple.initialize(
   clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
-  redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
-  
-  // OAuth endpoints
-  baseUrl: 'https://idp.test.certilia.com',
-  authorizationEndpoint: 'https://idp.test.certilia.com/oauth2/authorize',
-  tokenEndpoint: 'https://idp.test.certilia.com/oauth2/token',
-  userInfoEndpoint: 'https://idp.test.certilia.com/oauth2/userinfo',
-  
-  // Optional parameters
-  serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
+  serverUrl: 'https://your-backend-server.com',
   scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
   enableLogging: true,
-  preferEphemeralSession: true,
-  sessionTimeout: 3600000, // 1 hour
-  refreshTokenTimeout: 2592000000, // 30 days
 );
-
-final client = await CertiliaSDK.initialize(config: config);
 ```
+
+The backend server handles:
+- All OAuth communication with Certilia API
+- Token management and refresh
+- User info retrieval
+- Security and API credentials
 
 ## Platform Behavior
 
