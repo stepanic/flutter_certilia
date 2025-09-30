@@ -520,10 +520,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
-      backgroundColor: CertiliaTheme.backgroundColor(isDark),
+      backgroundColor: CertiliaTheme.backgroundLight,
       body: Column(
         children: [
           _buildHeader(),
@@ -541,18 +539,16 @@ class _HomePageState extends State<HomePage> {
 
   /// Build header with logo and language toggle
   Widget _buildHeader() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: CertiliaTheme.spaceLG,
         vertical: CertiliaTheme.spaceMD,
       ),
-      decoration: BoxDecoration(
-        color: CertiliaTheme.surfaceColor(isDark),
+      decoration: const BoxDecoration(
+        color: CertiliaTheme.backgroundWhite,
         border: Border(
           bottom: BorderSide(
-            color: CertiliaTheme.borderColor(isDark),
+            color: CertiliaTheme.borderColor,
             width: 1,
           ),
         ),
@@ -584,35 +580,19 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(width: CertiliaTheme.spaceSM),
-                Text(
+                const Text(
                   'CERTILIA',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 1.2,
-                    color: CertiliaTheme.textPrimaryColor(isDark),
+                    color: CertiliaTheme.textPrimary,
                   ),
                 ),
               ],
             ),
-            // Theme and language toggles
-            Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    isDark ? Icons.light_mode : Icons.dark_mode,
-                    size: 20,
-                  ),
-                  color: CertiliaTheme.textSecondaryColor(isDark),
-                  onPressed: widget.onThemeToggle,
-                  tooltip: isDark
-                    ? (_isEnglish ? 'Light mode' : 'Svijetli način')
-                    : (_isEnglish ? 'Dark mode' : 'Tamni način'),
-                ),
-                const SizedBox(width: CertiliaTheme.spaceSM),
-                _buildLanguageToggle(),
-              ],
-            ),
+            // Language toggle
+            _buildLanguageToggle(),
           ],
         ),
       ),
@@ -621,11 +601,9 @@ class _HomePageState extends State<HomePage> {
 
   /// Build language toggle button group
   Widget _buildLanguageToggle() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: CertiliaTheme.borderColor(isDark)),
+        border: Border.all(color: CertiliaTheme.borderColor),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -634,7 +612,7 @@ class _HomePageState extends State<HomePage> {
           Container(
             width: 1,
             height: 24,
-            color: CertiliaTheme.borderColor(isDark),
+            color: CertiliaTheme.borderColor,
           ),
           _buildLanguageButton('EN', _isEnglish, isLast: true),
         ],
@@ -649,8 +627,6 @@ class _HomePageState extends State<HomePage> {
     bool isFirst = false,
     bool isLast = false,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return InkWell(
       onTap: () => setState(() => _isEnglish = label == 'EN'),
       borderRadius: BorderRadius.horizontal(
@@ -678,7 +654,7 @@ class _HomePageState extends State<HomePage> {
             fontWeight: FontWeight.w600,
             color: isActive
               ? Colors.white
-              : CertiliaTheme.textSecondaryColor(isDark),
+              : CertiliaTheme.textSecondary,
           ),
         ),
       ),
@@ -687,27 +663,23 @@ class _HomePageState extends State<HomePage> {
 
   /// Build loading view
   Widget _buildLoadingView() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Center(
-      child: SafeArea(
-        child: _buildCard(
-          maxWidth: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(
-                color: CertiliaTheme.primaryBlue,
-              ),
-              const SizedBox(height: CertiliaTheme.spaceLG),
-              Text(
-                _isEnglish
-                  ? 'Initializing SDK...'
-                  : 'Inicijalizacija SDK-a...',
-                style: CertiliaTextStyles.bodyMedium(isDark),
-              ),
-            ],
-          ),
+      child: _buildCard(
+        maxWidth: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(
+              color: CertiliaTheme.primaryBlue,
+            ),
+            const SizedBox(height: CertiliaTheme.spaceLG),
+            Text(
+              _isEnglish
+                ? 'Initializing SDK...'
+                : 'Inicijalizacija SDK-a...',
+              style: CertiliaTextStyles.bodyMedium,
+            ),
+          ],
         ),
       ),
     );
@@ -715,17 +687,14 @@ class _HomePageState extends State<HomePage> {
 
   /// Build unauthenticated view
   Widget _buildUnauthenticatedView() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(CertiliaTheme.spaceLG),
-        child: SafeArea(
-          child: _buildCard(
-            maxWidth: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+        child: _buildCard(
+          maxWidth: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               // Icon
               Container(
                 width: 80,
@@ -747,7 +716,7 @@ class _HomePageState extends State<HomePage> {
                 _isEnglish
                   ? 'Welcome to Certilia'
                   : 'Dobrodošli u Certilia',
-                style: CertiliaTextStyles.heading(isDark),
+                style: CertiliaTextStyles.heading,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: CertiliaTheme.spaceSM),
@@ -756,8 +725,8 @@ class _HomePageState extends State<HomePage> {
                 _isEnglish
                     ? 'Sign in with your Croatian eID to continue'
                     : 'Prijavite se s hrvatskom eOsobnom za nastavak',
-                style: CertiliaTextStyles.bodyMedium(isDark).copyWith(
-                  color: CertiliaTheme.textSecondaryColor(isDark),
+                style: CertiliaTextStyles.bodyMedium.copyWith(
+                  color: CertiliaTheme.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -797,13 +766,12 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-                // Error message
-                if (_error != null) ...[
-                  const SizedBox(height: CertiliaTheme.spaceLG),
-                  _buildErrorMessage(_error!),
-                ],
+              // Error message
+              if (_error != null) ...[
+                const SizedBox(height: CertiliaTheme.spaceLG),
+                _buildErrorMessage(_error!),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -814,34 +782,31 @@ class _HomePageState extends State<HomePage> {
   Widget _buildAuthenticatedView() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(CertiliaTheme.spaceLG),
-      child: SafeArea(
-        top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWideScreen = constraints.maxWidth > 900;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideScreen = constraints.maxWidth > 900;
 
-            if (isWideScreen) {
-              // Two-column layout for wide screens
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildLeftColumn()),
-                  const SizedBox(width: CertiliaTheme.spaceLG),
-                  Expanded(child: _buildRightColumn()),
-                ],
-              );
-            } else {
-              // Single column for narrow screens
-              return Column(
-                children: [
-                  _buildLeftColumn(),
-                  const SizedBox(height: CertiliaTheme.spaceLG),
-                  _buildRightColumn(),
-                ],
-              );
-            }
-          },
-        ),
+          if (isWideScreen) {
+            // Two-column layout for wide screens
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _buildLeftColumn()),
+                const SizedBox(width: CertiliaTheme.spaceLG),
+                Expanded(child: _buildRightColumn()),
+              ],
+            );
+          } else {
+            // Single column for narrow screens
+            return Column(
+              children: [
+                _buildLeftColumn(),
+                const SizedBox(height: CertiliaTheme.spaceLG),
+                _buildRightColumn(),
+              ],
+            );
+          }
+        },
       ),
     );
   }
@@ -892,8 +857,6 @@ class _HomePageState extends State<HomePage> {
 
   /// Build welcome card with user greeting
   Widget _buildWelcomeCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return _buildCard(
       child: Row(
         children: [
@@ -917,12 +880,12 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   _isEnglish ? 'Welcome!' : 'Dobrodošli!',
-                  style: CertiliaTextStyles.label(isDark),
+                  style: CertiliaTextStyles.label,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _user!.fullName ?? (_isEnglish ? 'User' : 'Korisnik'),
-                  style: CertiliaTextStyles.subheading(isDark),
+                  style: CertiliaTextStyles.subheading,
                 ),
               ],
             ),
@@ -934,72 +897,38 @@ class _HomePageState extends State<HomePage> {
 
   /// Build basic user information card
   Widget _buildBasicInfoCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: CertiliaTheme.primaryBlue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.person_outline,
-                  size: 20,
-                  color: CertiliaTheme.primaryBlue,
-                ),
-              ),
-              const SizedBox(width: CertiliaTheme.spaceSM),
-              Text(
-                _isEnglish ? 'Basic Information' : 'Osnovni podaci',
-                style: CertiliaTextStyles.subheading(isDark),
-              ),
-            ],
+          Text(
+            _isEnglish ? 'Basic Information' : 'Osnovni podaci',
+            style: CertiliaTextStyles.subheading,
           ),
           const SizedBox(height: CertiliaTheme.spaceMD),
-          Divider(height: 1, color: CertiliaTheme.dividerColor(isDark)),
+          const Divider(height: 1, color: CertiliaTheme.dividerColor),
           const SizedBox(height: CertiliaTheme.spaceMD),
 
-          _buildInfoRowWithIcon(
-            Icons.fingerprint,
+          _buildInfoRow(
             _isEnglish ? 'User ID' : 'Korisnički ID',
             _user!.sub,
-            isDark,
           ),
-          _buildInfoRowWithIcon(
-            Icons.badge_outlined,
+          _buildInfoRow(
             _isEnglish ? 'First Name' : 'Ime',
             _user!.firstName,
-            isDark,
           ),
-          _buildInfoRowWithIcon(
-            Icons.badge_outlined,
+          _buildInfoRow(
             _isEnglish ? 'Last Name' : 'Prezime',
             _user!.lastName,
-            isDark,
           ),
-          _buildInfoRowWithIcon(
-            Icons.credit_card,
-            'OIB',
-            _user!.oib,
-            isDark,
-          ),
-          _buildInfoRowWithIcon(
-            Icons.email_outlined,
+          _buildInfoRow('OIB', _user!.oib),
+          _buildInfoRow(
             _isEnglish ? 'Email' : 'E-pošta',
             _user!.email,
-            isDark,
           ),
-          _buildInfoRowWithIcon(
-            Icons.cake_outlined,
+          _buildInfoRow(
             _isEnglish ? 'Date of Birth' : 'Datum rođenja',
             _user!.dateOfBirth?.toString().split(' ')[0],
-            isDark,
           ),
         ],
       ),
@@ -1008,8 +937,6 @@ class _HomePageState extends State<HomePage> {
 
   /// Build token status card
   Widget _buildTokenStatusCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1026,7 +953,7 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(width: CertiliaTheme.spaceSM),
               Text(
                 _isEnglish ? 'Token Status' : 'Status tokena',
-                style: CertiliaTextStyles.subheading(isDark),
+                style: CertiliaTextStyles.subheading,
               ),
             ],
           ),
@@ -1061,7 +988,7 @@ class _HomePageState extends State<HomePage> {
                       _isEnglish
                           ? 'Expires in ${_getTimeUntilExpiry()}'
                           : 'Ističe za ${_getTimeUntilExpiry()}',
-                      style: CertiliaTextStyles.bodySmall(isDark).copyWith(
+                      style: CertiliaTextStyles.bodySmall.copyWith(
                         color: _isTokenExpiringSoon()
                             ? CertiliaTheme.warningOrange
                             : CertiliaTheme.successGreen,
@@ -1075,7 +1002,7 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: CertiliaTheme.spaceSM),
             Text(
               '${_isEnglish ? 'Expires at' : 'Ističe'}: ${_formatDateTime(_tokenExpiryTime!)}',
-              style: CertiliaTextStyles.bodySmall(isDark),
+              style: CertiliaTextStyles.bodySmall,
             ),
           ],
 
@@ -1101,8 +1028,6 @@ class _HomePageState extends State<HomePage> {
 
   /// Build extended information card
   Widget _buildExtendedInfoCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1110,26 +1035,9 @@ class _HomePageState extends State<HomePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: CertiliaTheme.successGreen.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.description_outlined,
-                      size: 20,
-                      color: CertiliaTheme.successGreen,
-                    ),
-                  ),
-                  const SizedBox(width: CertiliaTheme.spaceSM),
-                  Text(
-                    _isEnglish ? 'Extended Information' : 'Prošireni podaci',
-                    style: CertiliaTextStyles.subheading(isDark),
-                  ),
-                ],
+              Text(
+                _isEnglish ? 'Extended Information' : 'Prošireni podaci',
+                style: CertiliaTextStyles.subheading,
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, size: 20),
@@ -1143,13 +1051,13 @@ class _HomePageState extends State<HomePage> {
 
           Text(
             '${_extendedInfo!.availableFields.length} ${_isEnglish ? 'fields available' : 'dostupnih polja'}',
-            style: CertiliaTextStyles.labelSmall(isDark).copyWith(
+            style: CertiliaTextStyles.labelSmall.copyWith(
               color: CertiliaTheme.successGreen,
             ),
           ),
 
           const SizedBox(height: CertiliaTheme.spaceMD),
-          Divider(height: 1, color: CertiliaTheme.dividerColor(isDark)),
+          const Divider(height: 1, color: CertiliaTheme.dividerColor),
           const SizedBox(height: CertiliaTheme.spaceMD),
 
           ..._extendedInfo!.availableFields.map((field) {
@@ -1166,23 +1074,21 @@ class _HomePageState extends State<HomePage> {
 
   /// Build extended info placeholder
   Widget _buildExtendedInfoPlaceholder() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return _buildCard(
       child: Column(
         children: [
           Icon(
             Icons.info_outline,
             size: 48,
-            color: CertiliaTheme.textTertiaryColor(isDark),
+            color: CertiliaTheme.textTertiary,
           ),
           const SizedBox(height: CertiliaTheme.spaceMD),
           Text(
             _isEnglish
               ? 'Extended information not loaded'
               : 'Prošireni podaci nisu učitani',
-            style: CertiliaTextStyles.bodyMedium(isDark).copyWith(
-              color: CertiliaTheme.textSecondaryColor(isDark),
+            style: CertiliaTextStyles.bodyMedium.copyWith(
+              color: CertiliaTheme.textSecondary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -1213,32 +1119,13 @@ class _HomePageState extends State<HomePage> {
 
   /// Build actions card with buttons
   Widget _buildActionsCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: CertiliaTheme.primaryBlue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.settings_outlined,
-                  size: 20,
-                  color: CertiliaTheme.primaryBlue,
-                ),
-              ),
-              const SizedBox(width: CertiliaTheme.spaceSM),
-              Text(
-                _isEnglish ? 'Actions' : 'Akcije',
-                style: CertiliaTextStyles.subheading(isDark),
-              ),
-            ],
+          Text(
+            _isEnglish ? 'Actions' : 'Akcije',
+            style: CertiliaTextStyles.subheading,
           ),
           const SizedBox(height: CertiliaTheme.spaceMD),
 
@@ -1297,15 +1184,13 @@ class _HomePageState extends State<HomePage> {
     required Widget child,
     double? maxWidth,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     Widget card = Container(
       width: double.infinity,
       padding: const EdgeInsets.all(CertiliaTheme.spaceLG),
       decoration: BoxDecoration(
-        color: CertiliaTheme.surfaceColor(isDark),
+        color: CertiliaTheme.backgroundWhite,
         borderRadius: BorderRadius.circular(CertiliaTheme.radiusMedium),
-        boxShadow: CertiliaTheme.cardShadow(isDark),
+        boxShadow: CertiliaTheme.cardShadow,
       ),
       child: child,
     );
@@ -1322,8 +1207,6 @@ class _HomePageState extends State<HomePage> {
 
   /// Build information row (label-value pair)
   Widget _buildInfoRow(String label, String? value) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     if (value == null || value.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1337,64 +1220,14 @@ class _HomePageState extends State<HomePage> {
             width: 120,
             child: Text(
               label,
-              style: CertiliaTextStyles.label(isDark),
+              style: CertiliaTextStyles.label,
             ),
           ),
           const SizedBox(width: CertiliaTheme.spaceMD),
           Expanded(
             child: Text(
               value,
-              style: CertiliaTextStyles.bodyMedium(isDark),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Build information row with icon (label-value pair with icon)
-  Widget _buildInfoRowWithIcon(
-    IconData icon,
-    String label,
-    String? value,
-    bool isDark,
-  ) {
-    if (value == null || value.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: CertiliaTheme.spaceMD),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: CertiliaTheme.primaryBlue.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(
-              icon,
-              size: 16,
-              color: CertiliaTheme.primaryBlue,
-            ),
-          ),
-          const SizedBox(width: CertiliaTheme.spaceSM),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: CertiliaTextStyles.labelSmall(isDark),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: CertiliaTextStyles.bodyMedium(isDark),
-                ),
-              ],
+              style: CertiliaTextStyles.bodyMedium,
             ),
           ),
         ],
@@ -1404,8 +1237,6 @@ class _HomePageState extends State<HomePage> {
 
   /// Build token display with copy button
   Widget _buildTokenDisplay(String label, String? token) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     if (token == null) return const SizedBox.shrink();
 
     final truncatedToken = token.length > 30
@@ -1415,7 +1246,7 @@ class _HomePageState extends State<HomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: CertiliaTextStyles.labelSmall(isDark)),
+        Text(label, style: CertiliaTextStyles.labelSmall),
         const SizedBox(height: 4),
         Container(
           padding: const EdgeInsets.symmetric(
@@ -1423,7 +1254,7 @@ class _HomePageState extends State<HomePage> {
             vertical: CertiliaTheme.spaceSM,
           ),
           decoration: BoxDecoration(
-            color: CertiliaTheme.surfaceGrayColor(isDark),
+            color: CertiliaTheme.backgroundGray,
             borderRadius: BorderRadius.circular(CertiliaTheme.radiusSmall),
           ),
           child: Row(
@@ -1431,7 +1262,7 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: Text(
                   truncatedToken,
-                  style: CertiliaTextStyles.bodySmall(isDark).copyWith(
+                  style: CertiliaTextStyles.bodySmall.copyWith(
                     fontFamily: 'monospace',
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1467,8 +1298,6 @@ class _HomePageState extends State<HomePage> {
 
   /// Build error message widget
   Widget _buildErrorMessage(String message) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.all(CertiliaTheme.spaceMD),
       decoration: BoxDecoration(
@@ -1487,7 +1316,7 @@ class _HomePageState extends State<HomePage> {
           Expanded(
             child: Text(
               message,
-              style: CertiliaTextStyles.bodySmall(isDark).copyWith(
+              style: CertiliaTextStyles.bodySmall.copyWith(
                 color: CertiliaTheme.errorRed,
               ),
             ),

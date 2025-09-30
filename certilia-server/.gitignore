@@ -3,10 +3,12 @@ node_modules/
 
 # Environment variables
 .env
-.env.local*
+.env.local
+.env.local.*
 .env.*.local
 .env.production
 .env.test
+.env.development
 
 # Logs
 logs/
@@ -105,4 +107,11 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-*~*.txt
+*~
+
+# Temporary test files
+*.txt
+token.txt
+
+# Docker
+.dockerignore.bak
