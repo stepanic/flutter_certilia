@@ -312,12 +312,15 @@ export const exchangeCode = async (req, res, next) => {
         logger.info('Using ID token claims as fallback');
         userInfo = {
           sub: idTokenClaims.sub,
-          firstName: idTokenClaims.given_name,
-          lastName: idTokenClaims.family_name,
+          given_name: idTokenClaims.given_name,
+          family_name: idTokenClaims.family_name,
+          firstName: idTokenClaims.given_name,  // Keep both for compatibility
+          lastName: idTokenClaims.family_name,   // Keep both for compatibility
           fullName: idTokenClaims.name || `${idTokenClaims.given_name || ''} ${idTokenClaims.family_name || ''}`.trim(),
           email: idTokenClaims.email,
           oib: idTokenClaims.pin || idTokenClaims.oib,
-          dateOfBirth: idTokenClaims.birthdate,
+          birthdate: idTokenClaims.birthdate,
+          dateOfBirth: idTokenClaims.birthdate,  // Keep both for compatibility
           // Include all other claims
           ...idTokenClaims
         };
@@ -347,11 +350,11 @@ export const exchangeCode = async (req, res, next) => {
       ...tokens,
       user: {
         sub: userInfo.sub,
-        firstName: userInfo.given_name,
-        lastName: userInfo.family_name,
+        firstName: userInfo.firstName || userInfo.given_name,
+        lastName: userInfo.lastName || userInfo.family_name,
         oib: userInfo.oib,
         email: userInfo.email,
-        dateOfBirth: userInfo.birthdate,
+        dateOfBirth: userInfo.dateOfBirth || userInfo.birthdate,
       },
     });
   } catch (error) {
