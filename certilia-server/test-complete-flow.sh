@@ -189,9 +189,20 @@ else
     echo "$EXTENDED_BODY" | jq '.' 2>/dev/null || echo "$EXTENDED_BODY"
 fi
 
-# Save access token to file for debugging
-echo "$ACCESS_TOKEN" > /tmp/last-access-token.txt
-echo -e "\n${GREEN}💾 Access token saved to /tmp/last-access-token.txt${NC}"
+# Save tokens to file for debugging and reuse
+EXPORT_FILE="/tmp/certilia_tokens.sh"
+echo "#!/bin/bash" > "$EXPORT_FILE"
+echo "export CERTILIA_ACCESS_TOKEN='$ACCESS_TOKEN'" >> "$EXPORT_FILE"
+echo "export CERTILIA_REFRESH_TOKEN='$(echo "$EXCHANGE_RESPONSE" | jq -r '.refreshToken' 2>/dev/null)'" >> "$EXPORT_FILE"
+echo "export CERTILIA_ID_TOKEN='$(echo "$EXCHANGE_RESPONSE" | jq -r '.idToken' 2>/dev/null)'" >> "$EXPORT_FILE"
+echo "export CERTILIA_SESSION_ID='$SESSION_ID'" >> "$EXPORT_FILE"
+echo "export CERTILIA_STATE='$STATE'" >> "$EXPORT_FILE"
+echo "export CERTILIA_SERVER_URL='$BASE_URL'" >> "$EXPORT_FILE"
+chmod +x "$EXPORT_FILE"
+
+echo -e "\n${GREEN}💾 Tokens exported to $EXPORT_FILE${NC}"
+echo -e "${YELLOW}To reuse tokens in another session:${NC}"
+echo "source $EXPORT_FILE"
 
 echo -e "\n${GREEN}🎉 Complete OAuth flow test finished!${NC}"
 echo ""

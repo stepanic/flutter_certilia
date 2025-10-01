@@ -297,19 +297,14 @@ export const exchangeCode = async (req, res, next) => {
       }
     }
     
-    // Try to get user info from userinfo endpoint
+    // Try to get user info from userinfo endpoint (unless disabled)
     let userInfo = {};
-    try {
-      userInfo = await certiliaService.getUserInfo(
-        tokenResponse.access_token,
-        tokenResponse.id_token
-      );
-      logger.info('UserInfo endpoint succeeded');
-    } catch (error) {
-      logger.warn('UserInfo endpoint failed:', error.message);
-      // If userinfo fails but we have ID token claims, use them
+    const skipUserInfo = process.env.SKIP_USERINFO_ENDPOINT === 'true';
+
+    if (skipUserInfo) {
+      // Skip userinfo endpoint in production environments where it requires token binding
+      logger.info('Skipping userinfo endpoint, using ID token claims directly');
       if (idTokenClaims && idTokenClaims.sub) {
-        logger.info('Using ID token claims as fallback');
         userInfo = {
           sub: idTokenClaims.sub,
           given_name: idTokenClaims.given_name,
@@ -325,7 +320,38 @@ export const exchangeCode = async (req, res, next) => {
           ...idTokenClaims
         };
       } else {
-        throw error;
+        throw new Error('No ID token claims available');
+      }
+    } else {
+      // Try to fetch from userinfo endpoint
+      try {
+        userInfo = await certiliaService.getUserInfo(
+          tokenResponse.access_token,
+          tokenResponse.id_token
+        );
+        logger.info('UserInfo endpoint succeeded');
+      } catch (error) {
+        logger.warn('UserInfo endpoint failed:', error.message);
+        // If userinfo fails but we have ID token claims, use them
+        if (idTokenClaims && idTokenClaims.sub) {
+          logger.info('Using ID token claims as fallback');
+          userInfo = {
+            sub: idTokenClaims.sub,
+            given_name: idTokenClaims.given_name,
+            family_name: idTokenClaims.family_name,
+            firstName: idTokenClaims.given_name,  // Keep both for compatibility
+            lastName: idTokenClaims.family_name,   // Keep both for compatibility
+            fullName: idTokenClaims.name || `${idTokenClaims.given_name || ''} ${idTokenClaims.family_name || ''}`.trim(),
+            email: idTokenClaims.email,
+            oib: idTokenClaims.pin || idTokenClaims.oib,
+            birthdate: idTokenClaims.birthdate,
+            dateOfBirth: idTokenClaims.birthdate,  // Keep both for compatibility
+            // Include all other claims
+            ...idTokenClaims
+          };
+        } else {
+          throw error;
+        }
       }
     }
 
