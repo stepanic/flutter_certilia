@@ -2,6 +2,31 @@
 
 Node.js middleware server that handles OAuth2/OIDC authentication flow with Certilia IDP for mobile and web applications.
 
+---
+
+## 🚀 QUICK START
+
+**📖 Za detaljne upute, pogledajte: [START.md](START.md)**
+
+### Najbrži način:
+
+#### 🧪 TEST Environment (idp.test.certilia.com):
+```bash
+npm run dev:test
+```
+
+#### 🚀 PRODUCTION Environment (idp.certilia.com):
+```bash
+npm run dev:prod
+```
+
+**Obje naredbe automatski:**
+- ✅ Kopiraju ispravni `.env` file
+- ✅ Pokreću server s auto-reload
+- ✅ Koriste ispravan Certilia endpoint
+
+---
+
 ## Overview
 
 This server acts as a secure middleware between your Flutter/mobile applications and Certilia IDP, handling:

@@ -7,8 +7,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "dev:test-env": "cp .env.local.test .env && nodemon src/index.js",
-    "dev:prod-env": "cp .env.local.production .env && nodemon src/index.js",
+    "dev:test": "cp .env.local .env && nodemon src/index.js",
+    "dev:prod": "cp .env.local.production .env && nodemon src/index.js",
+    "switch:test": "cp .env.local .env && echo '✅ Switched to TEST environment'",
+    "switch:prod": "cp .env.local.production .env && echo '✅ Switched to PRODUCTION environment'",
     "test": "jest",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write \"src/**/*.js\""

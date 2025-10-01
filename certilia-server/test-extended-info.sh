@@ -45,15 +45,17 @@ echo ""
 
 if [ "$http_code" = "200" ]; then
     echo -e "${GREEN}✅ Extended user info retrieved successfully!${NC}"
-    echo ""
-    echo -e "${BLUE}Response:${NC}"
-    echo "$body" | jq '.' 2>/dev/null || echo "$body"
-    
+
     # Extract available fields
     echo ""
-    echo -e "${YELLOW}📋 Available fields:${NC}"
+    echo -e "${YELLOW}📋 Available fields ($(echo "$body" | jq -r '.availableFields | length' 2>/dev/null) total):${NC}"
     echo "$body" | jq -r '.availableFields[]' 2>/dev/null || echo "Could not parse available fields"
-    
+
+    # Show key field values only
+    echo ""
+    echo -e "${YELLOW}📊 Key field values:${NC}"
+    echo "$body" | jq '{userInfo: .userInfo | {sub, given_name, family_name, oib, email, birthdate, mobile, formatted}}' 2>/dev/null || echo "Could not parse fields"
+
 else
     echo -e "${RED}❌ Failed to get extended user info${NC}"
     echo ""

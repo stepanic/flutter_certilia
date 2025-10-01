@@ -193,24 +193,37 @@ class CertiliaService {
    */
   async getUserInfo(accessToken, idToken = null) {
     try {
-      const headers = {
-        Authorization: `Bearer ${accessToken}`,
-      };
-      
-      // Try GET first
+      // Try multiple methods to satisfy token binding requirements
       let response;
+      let lastError;
+
+      // Method 1: GET with Authorization header only (works for test env)
       try {
+        logger.debug('Trying GET with Bearer token only');
         response = await this.client.get(config.certilia.userInfoEndpoint, {
-          headers,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         });
-      } catch (getError) {
-        // If GET fails with 400, try POST with access token in body
-        if (getError.response?.status === 400) {
-          logger.info('GET userinfo failed, trying POST method');
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        logger.debug('GET with Bearer only failed', {
+          status: error.response?.status,
+          error: error.response?.data?.error,
+          description: error.response?.data?.error_description
+        });
+      }
+
+      // If we have id_token, try additional methods
+      if (idToken) {
+        // Method 2: POST with access_token in body (simpler approach)
+        try {
+          logger.info('Trying POST with access_token in body');
           const params = new URLSearchParams({
             access_token: accessToken,
           });
-          
+
           response = await this.client.post(
             config.certilia.userInfoEndpoint,
             params.toString(),
@@ -220,12 +233,53 @@ class CertiliaService {
               },
             }
           );
-        } else {
-          throw getError;
+          return response.data;
+        } catch (error) {
+          lastError = error;
+          logger.debug('POST with access_token in body failed', {
+            status: error.response?.status,
+            error: error.response?.data?.error,
+            description: error.response?.data?.error_description
+          });
+        }
+
+        // Method 3: POST with empty body and Bearer auth
+        try {
+          logger.info('Trying POST with Bearer auth only');
+          response = await this.client.post(
+            config.certilia.userInfoEndpoint,
+            '',
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+            }
+          );
+          return response.data;
+        } catch (error) {
+          lastError = error;
+          logger.debug('POST with Bearer auth only failed', {
+            status: error.response?.status,
+            error: error.response?.data?.error,
+            description: error.response?.data?.error_description
+          });
+        }
+
+        // Check for specific error about token binding
+        if (lastError?.response?.data?.error_description?.includes('token binding')) {
+          logger.warn('UserInfo endpoint requires token binding which is not supported in production');
+          logger.info('Falling back to ID token claims');
+
+          // Return a special error that signals to use ID token
+          const fallbackError = new Error('USE_ID_TOKEN_FALLBACK');
+          fallbackError.originalError = lastError;
+          throw fallbackError;
         }
       }
 
-      return response.data;
+      // If all methods fail, throw the last error
+      throw lastError;
     } catch (error) {
       logger.error('User info fetch error:', {
         url: `${config.certilia.baseUrl}${config.certilia.userInfoEndpoint}`,

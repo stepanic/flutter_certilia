@@ -18,6 +18,9 @@ const __dirname = path.dirname(__filename);
 // Create Express app
 const app = express();
 
+// Trust proxy - required for ngrok and rate limiting with X-Forwarded-For
+app.set('trust proxy', true);
+
 // Security middleware with updated CSP for callback page
 app.use(helmet({
   contentSecurityPolicy: {
@@ -59,6 +62,8 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip validation warnings - we know we're behind ngrok proxy
+  validate: false,
 });
 
 app.use('/api', limiter);

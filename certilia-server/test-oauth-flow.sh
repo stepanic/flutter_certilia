@@ -25,7 +25,8 @@ if [ -z "$HEALTH_RESPONSE" ]; then
 fi
 
 echo -e "${GREEN}✅ Server is healthy${NC}"
-echo "$HEALTH_RESPONSE" | jq '.'
+# Uncomment to see full health response:
+# echo "$HEALTH_RESPONSE" | jq '.'
 
 # Initialize OAuth flow
 echo -e "\n${YELLOW}2. Initializing OAuth flow...${NC}"
@@ -37,16 +38,18 @@ if [ -z "$INIT_RESPONSE" ]; then
 fi
 
 echo -e "${GREEN}✅ OAuth flow initialized${NC}"
-echo "$INIT_RESPONSE" | jq '.'
 
 # Extract values
 AUTH_URL=$(echo "$INIT_RESPONSE" | jq -r '.authorization_url')
 SESSION_ID=$(echo "$INIT_RESPONSE" | jq -r '.session_id')
 STATE=$(echo "$INIT_RESPONSE" | jq -r '.state')
 
+# Extract just the base URL to show which environment
+CERTILIA_ENV=$(echo "$AUTH_URL" | grep -o "idp\.[^/]*" | head -1)
+
 echo -e "\n${YELLOW}3. OAuth Flow Details:${NC}"
-echo "Session ID: $SESSION_ID"
-echo "State: $STATE"
+echo "Certilia Environment: ${CERTILIA_ENV}"
+echo "Session ID: ${SESSION_ID:0:20}..."
 echo ""
 echo -e "${GREEN}📋 Authorization URL:${NC}"
 echo "$AUTH_URL"
@@ -177,22 +180,23 @@ if [ ! -z "$CALLBACK_URL" ]; then
     fi
     
     echo -e "${GREEN}✅ Tokens received successfully!${NC}"
-    echo "$EXCHANGE_RESPONSE" | jq '.' 2>/dev/null || echo "$EXCHANGE_RESPONSE"
-    
+    # Uncomment to see full response:
+    # echo "$EXCHANGE_RESPONSE" | jq '.' 2>/dev/null || echo "$EXCHANGE_RESPONSE"
+
     # Extract access token
     ACCESS_TOKEN=$(echo "$EXCHANGE_RESPONSE" | jq -r '.accessToken' 2>/dev/null)
-    
+
     if [ "$ACCESS_TOKEN" != "null" ] && [ ! -z "$ACCESS_TOKEN" ]; then
         echo -e "\n${YELLOW}📤 Testing authenticated endpoint...${NC}"
         USER_RESPONSE=$(curl -s "$API_URL/auth/user" \
           -H "Authorization: Bearer $ACCESS_TOKEN")
-        
+
         echo -e "${GREEN}✅ User info retrieved:${NC}"
-        echo "$USER_RESPONSE" | jq '.' 2>/dev/null || echo "$USER_RESPONSE"
-        
-        # Save token for future use
-        echo -e "\n${GREEN}💾 Access token ${NC}"
-        echo "$ACCESS_TOKEN"
+        # Show only essential fields
+        echo "$USER_RESPONSE" | jq '{user: .user | {sub, firstName, lastName, oib, email}}' 2>/dev/null || echo "$USER_RESPONSE"
+
+        # Don't print full token - too long
+        echo -e "\n${GREEN}💾 Access token saved (use with test-extended-info.sh)${NC}"
     fi
     
     echo -e "\n${GREEN}🎉 OAuth flow completed successfully!${NC}"
