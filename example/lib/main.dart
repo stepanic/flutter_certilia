@@ -59,12 +59,27 @@ class HomePage extends StatelessWidget {
     return FutureBuilder<Map<String, dynamic>>(
       future: _loadUserState(),
       builder: (context, snapshot) {
+        // Handle error state
+        if (snapshot.hasError) {
+          debugPrint('❌ Error loading user state: ${snapshot.error}');
+          // On error, show login screen
+          return _StatelessAuthView(
+            onThemeToggle: onThemeToggle,
+            hasStoredToken: false,
+            storedUser: null,
+          );
+        }
+
+        // Handle loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingScaffold(context);
         }
 
+        // Handle successful data load
         final hasToken = snapshot.data?['hasToken'] ?? false;
         final user = snapshot.data?['user'] as CertiliaUser?;
+
+        debugPrint('📊 HomePage loaded - hasToken: $hasToken, user: ${user?.fullName}');
 
         return _StatelessAuthView(
           onThemeToggle: onThemeToggle,
@@ -76,12 +91,22 @@ class HomePage extends StatelessWidget {
   }
 
   Future<Map<String, dynamic>> _loadUserState() async {
-    final hasToken = await CertiliaStatefulWrapper.hasValidStoredToken();
-    final user = hasToken ? await CertiliaStatefulWrapper.getStoredUser() : null;
-    return {
-      'hasToken': hasToken,
-      'user': user,
-    };
+    debugPrint('🔄 Loading user state from storage...');
+    try {
+      final hasToken = await CertiliaStatefulWrapper.hasValidStoredToken();
+      debugPrint('📌 Has valid token: $hasToken');
+
+      final user = hasToken ? await CertiliaStatefulWrapper.getStoredUser() : null;
+      debugPrint('👤 Loaded user: ${user?.fullName ?? "null"}');
+
+      return {
+        'hasToken': hasToken,
+        'user': user,
+      };
+    } catch (e) {
+      debugPrint('❌ Error in _loadUserState: $e');
+      rethrow;
+    }
   }
 
   Widget _buildLoadingScaffold(BuildContext context) {
@@ -965,17 +990,25 @@ extension on _StatelessAuthViewState {
 
       debugPrint('📱 Showing WebView for authentication...');
 
-      // Show the WebView for authentication (this will handle its own UI)
-      await certilia.authenticate(context);
+      // Show the WebView for authentication and get the user data
+      final user = await certilia.authenticate(context);
 
       if (!context.mounted) return;
 
-      debugPrint('✅ Authentication successful! Navigating to home...');
+      debugPrint('✅ Authentication successful! User: ${user.fullName}');
 
-      // Simple and direct navigation - no delays or callbacks needed
+      // Small delay to ensure data is fully saved to storage
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      if (!context.mounted) return;
+
+      // Navigate to home with a unique key to force fresh state
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
+          builder: (context) => HomePage(
+            key: ValueKey(DateTime.now().millisecondsSinceEpoch),
+            onThemeToggle: widget.onThemeToggle,
+          ),
         ),
         (route) => false,
       );
@@ -1026,10 +1059,13 @@ extension on _StatelessAuthViewState {
       _isLoadingExtendedInfo = false;
     });
 
-    // Navigate to fresh home page - use pushAndRemoveUntil to clear any stack issues
+    // Navigate to fresh home page with unique key to force rebuild
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
+        builder: (context) => HomePage(
+          key: ValueKey(DateTime.now().millisecondsSinceEpoch),
+          onThemeToggle: widget.onThemeToggle,
+        ),
       ),
       (route) => false,
     );
