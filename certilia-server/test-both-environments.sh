@@ -15,8 +15,13 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Configuration
-BASE_URL="https://uniformly-credible-opossum.ngrok-free.app"
+# Configuration - use environment variable or prompt
+if [ -z "$NGROK_URL" ]; then
+    echo -e "${YELLOW}Enter your ngrok URL (e.g., https://your-domain.ngrok-free.app):${NC}"
+    read NGROK_URL
+fi
+
+BASE_URL="$NGROK_URL"
 API_URL="$BASE_URL/api"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════╗${NC}"

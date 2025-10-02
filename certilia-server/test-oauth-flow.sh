@@ -9,8 +9,13 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}🧪 Testing Certilia OAuth2 Flow${NC}"
 echo "================================="
 
-# Configuration
-BASE_URL="https://uniformly-credible-opossum.ngrok-free.app"
+# Configuration - use environment variable or prompt
+if [ -z "$NGROK_URL" ]; then
+    echo -e "${YELLOW}Enter your ngrok URL (e.g., https://your-domain.ngrok-free.app):${NC}"
+    read NGROK_URL
+fi
+
+BASE_URL="$NGROK_URL"
 API_URL="$BASE_URL/api"
 
 # Check if server is running
@@ -68,8 +73,13 @@ echo "STATE=$STATE"
 cat > test-exchange.sh << 'EOF'
 #!/bin/bash
 
-# Configuration
-BASE_URL="https://uniformly-credible-opossum.ngrok-free.app"
+# Configuration - use environment variable or prompt
+if [ -z "$NGROK_URL" ]; then
+    echo -e "${YELLOW}Enter your ngrok URL (e.g., https://your-domain.ngrok-free.app):${NC}"
+    read NGROK_URL
+fi
+
+BASE_URL="$NGROK_URL"
 API_URL="$BASE_URL/api"
 
 echo "🔄 Testing Code Exchange"
