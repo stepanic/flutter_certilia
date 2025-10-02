@@ -993,25 +993,38 @@ extension on _StatelessAuthViewState {
       // Show the WebView for authentication and get the user data
       final user = await certilia.authenticate(context);
 
-      if (!context.mounted) return;
+      debugPrint('✅ Authentication returned! User: ${user.fullName}');
 
-      debugPrint('✅ Authentication successful! User: ${user.fullName}');
+      if (!context.mounted) {
+        debugPrint('⚠️ Context not mounted after authentication');
+        return;
+      }
 
       // Small delay to ensure data is fully saved to storage
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 300));
 
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        debugPrint('⚠️ Context not mounted after delay');
+        return;
+      }
+
+      debugPrint('🔄 Starting navigation to home page...');
 
       // Navigate to home with a unique key to force fresh state
-      Navigator.of(context).pushAndRemoveUntil(
+      // Use pushReplacement instead of pushAndRemoveUntil to avoid issues
+      await Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => HomePage(
-            key: ValueKey(DateTime.now().millisecondsSinceEpoch),
-            onThemeToggle: widget.onThemeToggle,
-          ),
+          builder: (context) {
+            debugPrint('🏠 Building HomePage after authentication...');
+            return HomePage(
+              key: ValueKey(DateTime.now().millisecondsSinceEpoch),
+              onThemeToggle: widget.onThemeToggle,
+            );
+          },
         ),
-        (route) => false,
       );
+
+      debugPrint('✅ Navigation complete');
 
     } on CertiliaAuthenticationException catch (e) {
       debugPrint('❌ Authentication failed: ${e.message}');
@@ -1059,15 +1072,14 @@ extension on _StatelessAuthViewState {
       _isLoadingExtendedInfo = false;
     });
 
-    // Navigate to fresh home page with unique key to force rebuild
-    Navigator.of(context).pushAndRemoveUntil(
+    // Navigate to fresh home page - use pushReplacement to keep navigation stack valid
+    Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => HomePage(
           key: ValueKey(DateTime.now().millisecondsSinceEpoch),
           onThemeToggle: widget.onThemeToggle,
         ),
       ),
-      (route) => false,
     );
 
     debugPrint('✅ Logout complete');
