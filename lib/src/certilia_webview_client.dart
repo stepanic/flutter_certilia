@@ -60,6 +60,33 @@ class CertiliaWebViewClient {
         );
       }
 
+      // Show loading dialog while exchanging tokens
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext dialogContext) {
+            return Center(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(Localizations.localeOf(dialogContext).languageCode == 'hr'
+                          ? 'Dovršavanje prijave...'
+                          : 'Completing authentication...'),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      }
+
       // Exchange code for tokens
       Map<String, dynamic> tokenData;
       try {
@@ -171,34 +198,10 @@ class CertiliaWebViewClient {
         ),
       ),
     );
-    
-    // If we got a code, show loading dialog while exchanging tokens
-    if (code != null && context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return Center(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    Text(Localizations.localeOf(context).languageCode == 'hr' 
-                        ? 'Dovršavanje prijave...' 
-                        : 'Completing authentication...'),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    }
-    
+
+    // Don't show dialog here - it will be shown in authenticate method if needed
+    // This prevents duplicate dialogs and stuck dialogs
+
     return code;
   }
 

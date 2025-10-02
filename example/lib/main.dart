@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_certilia/flutter_certilia.dart';
 // ignore: implementation_imports
 import 'package:flutter_certilia/src/certilia_stateful_wrapper.dart';
 // ignore: implementation_imports
 import 'package:flutter_certilia/src/certilia_webview_client.dart';
+// ignore: implementation_imports
+import 'package:flutter_certilia/src/models/certilia_config.dart';
 
 void main() {
   runApp(const MyApp());
@@ -114,27 +116,104 @@ class _StatelessAuthView extends StatefulWidget {
 
 class _StatelessAuthViewState extends State<_StatelessAuthView> {
   bool _isEnglish = false;
-  DateTime? _tokenExpiry;
-  String? _currentAccessToken;
-  String? _currentRefreshToken;
+  CertiliaExtendedInfo? _extendedInfo;
+  bool _isLoadingExtendedInfo = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTokenInfo();
+    _checkAndLoadData();
   }
 
-  Future<void> _loadTokenInfo() async {
+  Future<void> _checkAndLoadData() async {
+    // Check if we have stored token and load data if we do
     final accessToken = await CertiliaStatefulWrapper.getStoredAccessToken();
-    final refreshToken = await CertiliaStatefulWrapper.getStoredRefreshToken();
-    final expiry = await CertiliaStatefulWrapper.getStoredTokenExpiry();
 
-    if (mounted) {
-      setState(() {
-        _currentAccessToken = accessToken;
-        _currentRefreshToken = refreshToken;
-        _tokenExpiry = expiry;
-      });
+    // Automatically fetch extended info if we have a valid token
+    if (accessToken != null && mounted) {
+      _fetchExtendedInfoSilently();
+    }
+  }
+
+  Future<void> _fetchExtendedInfoSilently() async {
+    setState(() {
+      _isLoadingExtendedInfo = true;
+    });
+
+    try {
+      final token = await CertiliaStatefulWrapper.getStoredAccessToken();
+      if (token == null) return;
+
+      final client = CertiliaWebViewClient(
+        config: CertiliaConfig(
+          clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
+          redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
+          scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
+          baseUrl: 'https://idp.certilia.com',
+          authorizationEndpoint: 'https://idp.certilia.com/oauth2/authorize',
+          tokenEndpoint: 'https://idp.certilia.com/oauth2/token',
+          userInfoEndpoint: 'https://idp.certilia.com/oauth2/userinfo',
+        ),
+        serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
+      );
+
+      var extendedInfo = await client.getExtendedUserInfo(token);
+
+      // If we got minimal data (less than 10 fields), try to get full user info
+      // This happens after token refresh when JWT doesn't contain all claims
+      if (extendedInfo != null && extendedInfo.availableFields.length < 10) {
+        debugPrint('Extended info has only ${extendedInfo.availableFields.length} fields, fetching full user info...');
+
+        try {
+          // Get basic user info which calls the userinfo endpoint
+          final userInfo = await client.getUserInfo(token);
+
+          if (userInfo != null) {
+            // Merge user info into extended info
+            final mergedData = Map<String, dynamic>.from(extendedInfo.userInfo);
+
+            // Add user info fields
+            mergedData['given_name'] = userInfo.firstName;
+            mergedData['family_name'] = userInfo.lastName;
+            mergedData['first_name'] = userInfo.firstName;
+            mergedData['last_name'] = userInfo.lastName;
+            mergedData['email'] = userInfo.email;
+            mergedData['oib'] = userInfo.oib;
+            if (userInfo.dateOfBirth != null) {
+              mergedData['birthdate'] = userInfo.dateOfBirth!.toIso8601String().split('T')[0];
+              mergedData['date_of_birth'] = userInfo.dateOfBirth!.toIso8601String().split('T')[0];
+            }
+
+            // Create new extended info with merged data
+            extendedInfo = CertiliaExtendedInfo(
+              userInfo: mergedData,
+              availableFields: mergedData.keys.where((key) =>
+                mergedData[key] != null && mergedData[key].toString().isNotEmpty
+              ).toList(),
+            );
+
+            debugPrint('Merged info now has ${extendedInfo.availableFields.length} fields');
+          }
+        } catch (e) {
+          debugPrint('Failed to fetch basic user info: $e');
+        }
+      }
+
+      client.dispose();
+
+      if (mounted) {
+        setState(() {
+          _extendedInfo = extendedInfo;
+          _isLoadingExtendedInfo = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch extended info: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingExtendedInfo = false;
+        });
+      }
     }
   }
 
@@ -427,7 +506,6 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
       children: [
         _buildActionsCard(context, isDark, isEnglish),
         const SizedBox(height: CertiliaTheme.spaceLG),
-        _buildTokenCard(context, isDark, isEnglish),
       ],
     );
   }
@@ -519,34 +597,183 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                isEnglish ? 'Extended Information' : 'Proširene informacije',
-                style: CertiliaTextStyles.subheading(isDark),
-              ),
-              TextButton(
-                onPressed: () => _fetchExtendedInfo(context),
-                child: Text(
-                  isEnglish ? 'Fetch' : 'Dohvati',
-                  style: TextStyle(color: CertiliaTheme.primaryBlue),
-                ),
-              ),
-            ],
+          Text(
+            isEnglish ? 'Extended Information' : 'Proširene informacije',
+            style: CertiliaTextStyles.subheading(isDark),
           ),
           const SizedBox(height: CertiliaTheme.spaceMD),
-          Text(
-            isEnglish
-              ? 'Click "Fetch" to load extended user information using the stored token.'
-              : 'Kliknite "Dohvati" za učitavanje proširenih korisničkih informacija pomoću spremljenog tokena.',
-            style: CertiliaTextStyles.bodySmall(isDark).copyWith(
-              color: CertiliaTheme.textSecondaryColor(isDark),
-            ),
-          ),
+
+          if (_extendedInfo == null && !_isLoadingExtendedInfo)
+            Text(
+              isEnglish
+                ? 'Extended information will be loaded automatically.'
+                : 'Proširene informacije će biti automatski učitane.',
+              style: CertiliaTextStyles.bodySmall(isDark).copyWith(
+                color: CertiliaTheme.textSecondaryColor(isDark),
+              ),
+            )
+          else if (_isLoadingExtendedInfo && _extendedInfo == null)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(
+                      color: CertiliaTheme.primaryBlue,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      isEnglish ? 'Loading...' : 'Učitavanje...',
+                      style: CertiliaTextStyles.bodySmall(isDark),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_extendedInfo != null)
+            _buildExtendedInfoList(isDark, isEnglish),
         ],
       ),
     );
+  }
+
+  Widget _buildExtendedInfoList(bool isDark, bool isEnglish) {
+    final info = _extendedInfo!;
+    final thumbnail = info.getField('thumbnail') as String?;
+    final profilePhoto = info.getField('profile_photo') as String?;
+    final photo = info.getField('photo') as String?;
+
+    // Try to get any available image
+    final imageBase64 = thumbnail ?? profilePhoto ?? photo;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Profile image if available
+        if (imageBase64 != null && imageBase64.isNotEmpty) ...[
+          Center(
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: CertiliaTheme.borderColor(isDark),
+                  width: 2,
+                ),
+              ),
+              child: ClipOval(
+                child: _buildProfileImage(imageBase64, isDark),
+              ),
+            ),
+          ),
+          const SizedBox(height: CertiliaTheme.spaceLG),
+        ],
+
+        // Display all available fields
+        ...info.availableFields.map((field) {
+          final value = info.getField(field);
+
+          // Skip image fields as we display them separately
+          if (field == 'thumbnail' || field == 'profile_photo' || field == 'photo') {
+            return const SizedBox.shrink();
+          }
+
+          // Skip null or empty values
+          if (value == null || value.toString().isEmpty) {
+            return const SizedBox.shrink();
+          }
+
+          return Column(
+            children: [
+              Divider(
+                color: CertiliaTheme.dividerColor(isDark),
+                height: 1,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        _formatFieldName(field),
+                        style: CertiliaTextStyles.labelSmall(isDark),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 3,
+                      child: SelectableText(
+                        _formatFieldValue(value),
+                        style: CertiliaTextStyles.bodyMedium(isDark),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  Widget _buildProfileImage(String base64Image, bool isDark) {
+    try {
+      // Remove data:image/jpeg;base64, prefix if present
+      final cleanBase64 = base64Image.replaceAll(RegExp(r'data:image/[^;]+;base64,'), '');
+      final bytes = base64Decode(cleanBase64);
+
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildImagePlaceholder(isDark);
+        },
+      );
+    } catch (e) {
+      debugPrint('Error decoding profile image: $e');
+      return _buildImagePlaceholder(isDark);
+    }
+  }
+
+  Widget _buildImagePlaceholder(bool isDark) {
+    return Container(
+      color: CertiliaTheme.surfaceColor(isDark),
+      child: Icon(
+        Icons.person,
+        size: 60,
+        color: CertiliaTheme.textTertiaryColor(isDark),
+      ),
+    );
+  }
+
+  String _formatFieldName(String field) {
+    // Convert snake_case to Title Case
+    return field
+        .split('_')
+        .map((word) => word.isNotEmpty
+            ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}'
+            : '')
+        .join(' ');
+  }
+
+  String _formatFieldValue(dynamic value) {
+    if (value is DateTime) {
+      return '${value.day}.${value.month}.${value.year}';
+    }
+    if (value is bool) {
+      return value ? 'Yes' : 'No';
+    }
+    if (value is List) {
+      return value.join(', ');
+    }
+    if (value is Map) {
+      return value.entries.map((e) => '${e.key}: ${e.value}').join(', ');
+    }
+    return value.toString();
   }
 
   Widget _buildActionsCard(BuildContext context, bool isDark, bool isEnglish) {
@@ -560,29 +787,6 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
             style: CertiliaTextStyles.subheading(isDark),
           ),
           const SizedBox(height: CertiliaTheme.spaceLG),
-
-          // Refresh Token Button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _refreshToken(context, isEnglish),
-              icon: const Icon(Icons.refresh, size: 18),
-              label: Text(
-                isEnglish ? 'Refresh Token' : 'Osvježi token',
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: CertiliaTheme.primaryBlue,
-                side: BorderSide(color: CertiliaTheme.primaryBlue),
-                padding: const EdgeInsets.symmetric(
-                  vertical: CertiliaTheme.spaceMD,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(CertiliaTheme.radiusSmall),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: CertiliaTheme.spaceMD),
 
           // Logout Button
           SizedBox(
@@ -611,351 +815,6 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
     );
   }
 
-  Widget _buildTokenCard(BuildContext context, bool isDark, bool isEnglish) {
-    return _TokenCardWithTimer(
-      isDark: isDark,
-      isEnglish: isEnglish,
-      accessToken: _currentAccessToken,
-      refreshToken: _currentRefreshToken,
-      tokenExpiry: _tokenExpiry,
-    );
-  }
-}
-
-// Separate stateful widget for token card with timer
-class _TokenCardWithTimer extends StatefulWidget {
-  final bool isDark;
-  final bool isEnglish;
-  final String? accessToken;
-  final String? refreshToken;
-  final DateTime? tokenExpiry;
-
-  const _TokenCardWithTimer({
-    required this.isDark,
-    required this.isEnglish,
-    this.accessToken,
-    this.refreshToken,
-    this.tokenExpiry,
-  });
-
-  @override
-  State<_TokenCardWithTimer> createState() => _TokenCardWithTimerState();
-}
-
-class _TokenCardWithTimerState extends State<_TokenCardWithTimer> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    // Update every second for real-time countdown
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          // Just trigger rebuild to update countdown
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  Future<Map<String, dynamic>> _getTokenInfo() async {
-    try {
-      final accessToken = await CertiliaStatefulWrapper.getStoredAccessToken();
-      final refreshToken = await CertiliaStatefulWrapper.getStoredRefreshToken();
-      final expiryTime = await CertiliaStatefulWrapper.getStoredTokenExpiry();
-
-      return {
-        'accessToken': accessToken,
-        'refreshToken': refreshToken,
-        'expiryTime': expiryTime,
-      };
-    } catch (e) {
-      return {};
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Use widget parameters directly instead of loading from storage
-    final accessToken = widget.accessToken;
-    final refreshToken = widget.refreshToken;
-    final expiryTime = widget.tokenExpiry;
-
-    if (accessToken == null && refreshToken == null) {
-      // Load initial data if nothing passed
-      return FutureBuilder<Map<String, dynamic>>(
-        future: _getTokenInfo(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return _buildCard(
-              isDark: widget.isDark,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
-
-          return _buildTokenContent(
-            snapshot.data!['accessToken'] as String?,
-            snapshot.data!['refreshToken'] as String?,
-            snapshot.data!['expiryTime'] as DateTime?,
-          );
-        },
-      );
-    }
-
-    return _buildTokenContent(accessToken, refreshToken, expiryTime);
-  }
-
-  Widget _buildTokenContent(String? accessToken, String? refreshToken, DateTime? expiryTime) {
-
-    return _buildCard(
-      isDark: widget.isDark,
-      child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.vpn_key,
-                    size: 20,
-                    color: CertiliaTheme.primaryBlue,
-                  ),
-                  const SizedBox(width: CertiliaTheme.spaceSM),
-                  Text(
-                    widget.isEnglish ? 'Token Status' : 'Status tokena',
-                    style: CertiliaTextStyles.subheading(widget.isDark),
-                  ),
-                ],
-              ),
-              const SizedBox(height: CertiliaTheme.spaceLG),
-
-              // Token validity status
-              if (expiryTime != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(CertiliaTheme.spaceSM),
-                  decoration: BoxDecoration(
-                    color: _isTokenExpiringSoon(expiryTime)
-                        ? CertiliaTheme.warningOrange.withValues(alpha: 0.1)
-                        : CertiliaTheme.successGreen.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(CertiliaTheme.radiusSmall),
-                    border: Border.all(
-                      color: _isTokenExpiringSoon(expiryTime)
-                          ? CertiliaTheme.warningOrange
-                          : CertiliaTheme.successGreen,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 16,
-                        color: _isTokenExpiringSoon(expiryTime)
-                            ? CertiliaTheme.warningOrange
-                            : CertiliaTheme.successGreen,
-                      ),
-                      const SizedBox(width: CertiliaTheme.spaceSM),
-                      Expanded(
-                        child: Text(
-                          _getTokenExpiryText(expiryTime, widget.isEnglish),
-                          style: CertiliaTextStyles.bodySmall(widget.isDark).copyWith(
-                            color: _isTokenExpiringSoon(expiryTime)
-                                ? CertiliaTheme.warningOrange
-                                : CertiliaTheme.successGreen,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: CertiliaTheme.spaceSM),
-                Text(
-                  '${widget.isEnglish ? 'Expires at' : 'Ističe'}: ${_formatDateTime(expiryTime)}',
-                  style: CertiliaTextStyles.bodySmall(widget.isDark),
-                ),
-                const SizedBox(height: CertiliaTheme.spaceLG),
-              ],
-
-              // Access Token
-              if (accessToken != null) ...[
-                _buildTokenDisplay(
-                  widget.isEnglish ? 'Access Token' : 'Pristupni token',
-                  accessToken,
-                  widget.isDark,
-                ),
-                const SizedBox(height: CertiliaTheme.spaceMD),
-              ],
-
-              // Refresh Token
-              if (refreshToken != null) ...[
-                _buildTokenDisplay(
-                  widget.isEnglish ? 'Refresh Token' : 'Token za osvježavanje',
-                  refreshToken,
-                  widget.isDark,
-                ),
-              ],
-            ],
-          ),
-        );
-  }
-
-  Widget _buildTokenDisplay(String label, String token, bool isDark) {
-    final truncatedToken = token.length > 30
-        ? '${token.substring(0, 15)}...${token.substring(token.length - 15)}'
-        : token;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: CertiliaTextStyles.labelSmall(isDark)),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: CertiliaTheme.spaceSM,
-            vertical: CertiliaTheme.spaceSM,
-          ),
-          decoration: BoxDecoration(
-            color: CertiliaTheme.surfaceGrayColor(isDark),
-            borderRadius: BorderRadius.circular(CertiliaTheme.radiusSmall),
-            border: Border.all(
-              color: CertiliaTheme.borderColor(isDark),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  truncatedToken,
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    color: CertiliaTheme.textSecondaryColor(isDark),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: CertiliaTheme.spaceSM),
-              InkWell(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: token));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        widget.isEnglish
-                            ? 'Copied to clipboard'
-                            : 'Kopirano u međuspremnik',
-                      ),
-                      backgroundColor: CertiliaTheme.successGreen,
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.copy,
-                    size: 16,
-                    color: CertiliaTheme.primaryBlue,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Helper methods moved to _TokenCardWithTimerState
-  Widget _buildCard({
-    required Widget child,
-    required bool isDark,
-    double? maxWidth,
-  }) {
-    Widget card = Container(
-      decoration: BoxDecoration(
-        color: CertiliaTheme.surfaceColor(isDark),
-        borderRadius: BorderRadius.circular(CertiliaTheme.radiusLarge),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.2)
-                : Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(CertiliaTheme.spaceLG),
-      child: child,
-    );
-
-    if (maxWidth != null) {
-      card = Container(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: card,
-      );
-    }
-
-    return card;
-  }
-
-  bool _isTokenExpiringSoon(DateTime expiryTime) {
-    final timeUntilExpiry = expiryTime.difference(DateTime.now());
-    return timeUntilExpiry.inMinutes < 5;
-  }
-
-  String _getTokenExpiryText(DateTime expiryTime, bool isEnglish) {
-    final timeUntilExpiry = expiryTime.difference(DateTime.now());
-
-    if (timeUntilExpiry.isNegative) {
-      return isEnglish ? 'Token expired' : 'Token je istekao';
-    }
-
-    // Always show in seconds for precise granularity
-    final totalSeconds = timeUntilExpiry.inSeconds;
-
-    if (totalSeconds >= 86400) { // More than a day
-      final days = totalSeconds ~/ 86400;
-      final hours = (totalSeconds % 86400) ~/ 3600;
-      final minutes = (totalSeconds % 3600) ~/ 60;
-      final seconds = totalSeconds % 60;
-      return isEnglish
-          ? 'Expires in ${days}d ${hours}h ${minutes}m ${seconds}s'
-          : 'Ističe za ${days}d ${hours}h ${minutes}m ${seconds}s';
-    } else if (totalSeconds >= 3600) { // More than an hour
-      final hours = totalSeconds ~/ 3600;
-      final minutes = (totalSeconds % 3600) ~/ 60;
-      final seconds = totalSeconds % 60;
-      return isEnglish
-          ? 'Expires in ${hours}h ${minutes}m ${seconds}s'
-          : 'Ističe za ${hours}h ${minutes}m ${seconds}s';
-    } else if (totalSeconds >= 60) { // More than a minute
-      final minutes = totalSeconds ~/ 60;
-      final seconds = totalSeconds % 60;
-      return isEnglish
-          ? 'Expires in ${minutes}m ${seconds}s'
-          : 'Ističe za ${minutes}m ${seconds}s';
-    } else { // Less than a minute
-      return isEnglish
-          ? 'Expires in ${totalSeconds}s'
-          : 'Ističe za ${totalSeconds}s';
-    }
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    return '${local.day}.${local.month}.${local.year} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
 }
 
 // Extension methods for _StatelessAuthViewState continue below
@@ -1065,6 +924,11 @@ extension on _StatelessAuthViewState {
 
       if (!context.mounted) return;
 
+      // Small delay to ensure any dialogs from authentication are closed
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      if (!context.mounted) return;
+
       // Refresh the page to show authenticated state
       Navigator.pushReplacement(
         context,
@@ -1098,107 +962,20 @@ extension on _StatelessAuthViewState {
     }
   }
 
-  Future<void> _fetchExtendedInfo(BuildContext context) async {
-    _showLoadingDialog(context, 'Fetching extended info...');
 
-    try {
-      final token = await CertiliaStatefulWrapper.getStoredAccessToken();
-      if (token == null) throw Exception('No valid token');
-
-      final client = CertiliaWebViewClient(
-        config: CertiliaConfig(
-          clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
-          redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
-          scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
-          baseUrl: 'https://idp.certilia.com',
-          authorizationEndpoint: 'https://idp.certilia.com/oauth2/authorize',
-          tokenEndpoint: 'https://idp.certilia.com/oauth2/token',
-          userInfoEndpoint: 'https://idp.certilia.com/oauth2/userinfo',
-        ),
-        serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
-      );
-
-      final extendedInfo = await client.getExtendedUserInfo(token);
-      client.dispose();
-
-      if (!context.mounted) return;
-      Navigator.pop(context);
-
-      final fields = extendedInfo?.availableFields.join(', ') ?? 'None';
-      _showInfoDialog(context, 'Extended Info', 'Available fields:\n$fields');
-    } catch (e) {
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      _showErrorDialog(context, 'Failed to fetch: $e');
-    }
-  }
-
-  Future<void> _refreshToken(BuildContext context, bool isEnglish) async {
-    final message = isEnglish ? 'Refreshing token...' : 'Osvježavanje tokena...';
-    _showLoadingDialog(context, message);
-
-    try {
-      // Initialize SDK with state management
-      final wrapper = CertiliaStatefulWrapper(
-        config: CertiliaConfig(
-          clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
-          redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
-          scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
-          baseUrl: 'https://idp.certilia.com',
-          authorizationEndpoint: 'https://idp.certilia.com/oauth2/authorize',
-          tokenEndpoint: 'https://idp.certilia.com/oauth2/token',
-          userInfoEndpoint: 'https://idp.certilia.com/oauth2/userinfo',
-          enableLogging: true,
-        ),
-        serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
-      );
-
-      // Wait for initialization to load existing tokens from storage
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      // Perform refresh
-      debugPrint('🔄 Starting token refresh...');
-      await wrapper.refreshToken();
-      debugPrint('✅ Token refresh completed, waiting for save to complete...');
-
-      // Wait longer to ensure tokens are fully saved to secure storage
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      // Get new token info to verify they were saved
-      final newAccessToken = await CertiliaStatefulWrapper.getStoredAccessToken();
-      final newExpiry = await CertiliaStatefulWrapper.getStoredTokenExpiry();
-
-      debugPrint('📝 Verified New Access Token (first 20 chars): ${newAccessToken?.substring(0, 20 < newAccessToken.length ? 20 : newAccessToken.length)}...');
-      debugPrint('⏰ Verified New Token Expiry: $newExpiry');
-
-      // Don't dispose wrapper until after tokens are verified saved
-      wrapper.dispose();
-
-      // Get refresh token before setState
-      final newRefreshToken = await CertiliaStatefulWrapper.getStoredRefreshToken();
-
-      if (!context.mounted) return;
-      Navigator.pop(context);
-
-      // Update state with new token info instead of refreshing the page
-      setState(() {
-        _currentAccessToken = newAccessToken;
-        _currentRefreshToken = newRefreshToken;
-        _tokenExpiry = newExpiry;
-      });
-    } catch (e) {
-      debugPrint('❌ Token refresh failed: $e');
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      final errorMessage = isEnglish ? 'Refresh failed: $e' : 'Osvježavanje neuspješno: $e';
-      _showErrorDialog(context, errorMessage);
-    }
-  }
 
   Future<void> _logout(BuildContext context) async {
+    // Clear all stored authentication data
     await CertiliaStatefulWrapper.clearStoredData();
 
     if (!context.mounted) return;
+
+    // Clear state variables
+    // ignore: invalid_use_of_protected_member
+    setState(() {
+      _extendedInfo = null;
+      _isLoadingExtendedInfo = false;
+    });
 
     // Refresh the page to show unauthenticated state
     Navigator.pushReplacement(
@@ -1209,65 +986,11 @@ extension on _StatelessAuthViewState {
     );
   }
 
-  void _showLoadingDialog(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(width: 20),
-            Text(message),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showErrorDialog(BuildContext context, String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showInfoDialog(BuildContext context, String title, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSuccessDialog(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: CertiliaTheme.successGreen),
-            SizedBox(width: 8),
-            Text('Success'),
-          ],
-        ),
         content: Text(message),
         actions: [
           TextButton(
