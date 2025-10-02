@@ -17,13 +17,11 @@ import 'theme/certilia_theme.dart';
 /// Usage:
 /// ```dart
 /// CertiliaAuthWidget(
-///   clientId: 'your-client-id',
-///   serverUrl: 'https://your-server.com',
+///   serverUrl: 'https://your-backend-server.com',
 ///   onThemeToggle: () => toggleTheme(),
 /// )
 /// ```
 class CertiliaAuthWidget extends StatefulWidget {
-  final String clientId;
   final String serverUrl;
   final List<String> scopes;
   final VoidCallback? onThemeToggle;
@@ -31,7 +29,6 @@ class CertiliaAuthWidget extends StatefulWidget {
 
   const CertiliaAuthWidget({
     super.key,
-    required this.clientId,
     required this.serverUrl,
     this.scopes = const ['openid', 'profile', 'eid', 'email', 'offline_access'],
     this.onThemeToggle,
@@ -112,7 +109,6 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
     try {
       debugPrint('📱 [CertiliaAuthWidget] Initializing SDK...');
       final certilia = await CertiliaSDKSimple.initialize(
-        clientId: widget.clientId,
         serverUrl: widget.serverUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
@@ -206,7 +202,6 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
 
       // Use the SDK instance we already have for consistency
       final certilia = await CertiliaSDKSimple.initialize(
-        clientId: widget.clientId,
         serverUrl: widget.serverUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
@@ -246,7 +241,6 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
   Future<void> _refreshToken() async {
     try {
       final certilia = await CertiliaSDKSimple.initialize(
-        clientId: widget.clientId,
         serverUrl: widget.serverUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,

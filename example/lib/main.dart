@@ -40,8 +40,7 @@ class _MyAppState extends State<MyApp> {
       initialRoute: '/',
       routes: {
         '/': (context) => CertiliaAuthWidget(
-          // Configuration - Replace these with your actual values
-          clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
+          // Configuration - Only server URL is needed with proxy architecture
           serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
           scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
           enableLogging: true, // Set to true for development
@@ -53,7 +52,6 @@ class _MyAppState extends State<MyApp> {
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
           builder: (context) => CertiliaAuthWidget(
-            clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
             serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
             scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
             enableLogging: true,
