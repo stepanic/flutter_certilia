@@ -41,10 +41,10 @@ class _MyAppState extends State<MyApp> {
       routes: {
         '/': (context) => CertiliaAuthWidget(
           // Configuration - Replace these with your actual values
-          clientId: 'YOUR_CLIENT_ID_HERE',
-          serverUrl: 'https://your-backend-server.com',
+          clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
+          serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
           scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
-          enableLogging: false, // Set to true for development
+          enableLogging: true, // Set to true for development
           // Theme toggle callback
           onThemeToggle: _toggleTheme,
         ),
@@ -53,10 +53,10 @@ class _MyAppState extends State<MyApp> {
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
           builder: (context) => CertiliaAuthWidget(
-            clientId: 'YOUR_CLIENT_ID_HERE',
-            serverUrl: 'https://your-backend-server.com',
+            clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
+            serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
             scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
-            enableLogging: false,
+            enableLogging: true,
             onThemeToggle: _toggleTheme,
           ),
         );

@@ -7,12 +7,14 @@ import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
 import 'models/certilia_extended_info.dart';
 import 'exceptions/certilia_exception.dart';
+import 'services/certilia_logger.dart';
 
 /// Stateful wrapper around the stateless CertiliaWebViewClient
 /// This wrapper manages token storage and state management
 class CertiliaStatefulWrapper {
   final CertiliaWebViewClient _client;
   final FlutterSecureStorage _storage;
+  final CertiliaLogger _logger;
 
   // In-memory state
   CertiliaToken? _currentToken;
@@ -33,7 +35,11 @@ class CertiliaStatefulWrapper {
           config: config,
           serverUrl: serverUrl,
         ),
-        _storage = storage ?? const FlutterSecureStorage() {
+        _storage = storage ?? const FlutterSecureStorage(),
+        _logger = CertiliaLogger(
+          componentName: 'CertiliaStatefulWrapper',
+          enableLogging: config.enableLogging,
+        ) {
     // Load saved state on initialization
     _initializeState();
   }
@@ -50,10 +56,10 @@ class CertiliaStatefulWrapper {
 
   /// Authenticate using WebView and manage state
   Future<CertiliaUser> authenticate(BuildContext context) async {
-    print('🔐 [CertiliaStatefulWrapper] Starting authentication...');
+    _logger.log('🔐 Starting authentication...');
     // Call stateless authenticate
     final authData = await _client.authenticate(context);
-    print('📦 [CertiliaStatefulWrapper] Auth data received from WebView');
+    _logger.log('📦 Auth data received from WebView');
 
     // Create token object
     _currentToken = CertiliaToken(
@@ -141,15 +147,15 @@ class CertiliaStatefulWrapper {
       );
     }
 
-    print('🔄 [CertiliaStatefulWrapper] Starting token refresh...');
-    print('📝 Old token expiry: ${_currentToken?.expiresAt}');
+    _logger.log('🔄 Starting token refresh...');
+    _logger.debug('📝 Old token expiry: ${_currentToken?.expiresAt}');
 
     final tokenData = await _client.refreshToken(
       accessToken: _currentToken!.accessToken,
       refreshToken: _currentToken!.refreshToken!,
     );
 
-    print('📦 Token data received: expiresIn=${tokenData['expiresIn']} seconds');
+    _logger.debug('📦 Token data received: expiresIn=${tokenData['expiresIn']} seconds');
 
     // Update token
     _currentToken = CertiliaToken(
@@ -162,12 +168,12 @@ class CertiliaStatefulWrapper {
       tokenType: tokenData['tokenType'] ?? 'Bearer',
     );
 
-    print('✨ New token created with expiry: ${_currentToken!.expiresAt}');
-    print('🔑 New access token (first 20): ${_currentToken!.accessToken.substring(0, 20)}...');
+    _logger.debug('✨ New token created with expiry: ${_currentToken!.expiresAt}');
+    _logger.debug('🔑 New access token (first 20): ${_currentToken!.accessToken.substring(0, 20)}...');
 
     // Save updated token
     await _saveToken(_currentToken!);
-    print('💾 Token saved to secure storage');
+    _logger.log('💾 Token saved to secure storage');
   }
 
   /// Get extended user info
