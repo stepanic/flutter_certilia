@@ -34,16 +34,24 @@ case $env_choice in
     1)
         ENV_TYPE="test"
         CERTILIA_BASE_URL="https://idp.test.certilia.com"
-        CLIENT_ID="991dffbb1cdd4d51423e1a5de323f13b15256c63"
-        CLIENT_SECRET="997a2a9a810db68286ad0c250a2d2f5cd469f15f"
         echo -e "${GREEN}✅ Using TEST environment${NC}"
+
+        # Prompt for credentials
+        echo -e "\n${YELLOW}Enter TEST environment credentials:${NC}"
+        read -p "Client ID: " CLIENT_ID
+        read -s -p "Client Secret: " CLIENT_SECRET
+        echo ""
         ;;
     2)
         ENV_TYPE="production"
         CERTILIA_BASE_URL="https://idp.certilia.com"
-        CLIENT_ID="1a6ec445bbe092c1465f3d19aea9757e3e278a75"
-        CLIENT_SECRET="c902f1e7ae253022d45050526df49525b02eea95"
         echo -e "${GREEN}✅ Using PRODUCTION environment${NC}"
+
+        # Prompt for credentials
+        echo -e "\n${YELLOW}Enter PRODUCTION environment credentials:${NC}"
+        read -p "Client ID: " CLIENT_ID
+        read -s -p "Client Secret: " CLIENT_SECRET
+        echo ""
         ;;
     *)
         echo -e "${RED}Invalid choice. Exiting.${NC}"
