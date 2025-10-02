@@ -1,4 +1,6 @@
 import certiliaService from '../services/certiliaService.js';
+import tokenService from '../services/tokenService.js';
+import userDataService from '../services/userDataService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -55,8 +57,23 @@ export const getExtendedUserInfo = async (req, res, next) => {
 
     let userInfo;
     let source = 'userinfo_endpoint';
+    let thumbnail = null; // Store thumbnail from userDataService
     const skipUserInfo = process.env.SKIP_USERINFO_ENDPOINT === 'true';
     console.log('DEBUG 6: skipUserInfo:', skipUserInfo);
+
+    // Get user ID from JWT
+    const userId = req.user?.sub || req.userId;
+
+    // Get thumbnail from userDataService (not from JWT to avoid size issues)
+    if (userId) {
+      thumbnail = userDataService.getUserThumbnail(userId);
+      if (thumbnail) {
+        logger.info('Found thumbnail in userDataService', {
+          userId,
+          thumbnailSize: thumbnail.length
+        });
+      }
+    }
 
     // Check if we should skip userinfo endpoint
     if (skipUserInfo) {
@@ -73,8 +90,8 @@ export const getExtendedUserInfo = async (req, res, next) => {
         // Extract ALL user info from JWT payload (already has ID token claims merged)
         // Start with spreading all user data, then override specific fields
         userInfo = Object.keys(req.user).reduce((acc, key) => {
-          // Skip only technical JWT fields and certilia_tokens
-          if (!['exp', 'iat', 'nbf', 'certilia_tokens'].includes(key)) {
+          // Skip technical JWT fields, certilia_tokens, and thumbnail (will be added later)
+          if (!['exp', 'iat', 'nbf', 'certilia_tokens', 'thumbnail'].includes(key)) {
             acc[key] = req.user[key];
           }
           return acc;
@@ -138,8 +155,8 @@ export const getExtendedUserInfo = async (req, res, next) => {
 
             // Extract ALL user info from JWT payload (already has ID token claims merged)
             userInfo = Object.keys(req.user).reduce((acc, key) => {
-              // Skip only technical JWT fields and certilia_tokens
-              if (!['exp', 'iat', 'nbf', 'certilia_tokens'].includes(key)) {
+              // Skip technical JWT fields, certilia_tokens, and thumbnail (will be added later)
+              if (!['exp', 'iat', 'nbf', 'certilia_tokens', 'thumbnail'].includes(key)) {
                 acc[key] = req.user[key];
               }
               return acc;
@@ -179,6 +196,12 @@ export const getExtendedUserInfo = async (req, res, next) => {
 
     // Create available fields in snake_case
     const availableFieldsSnakeCase = Object.keys(snakeCaseUserInfo);
+
+    // Add thumbnail to user_info if available
+    if (thumbnail) {
+      snakeCaseUserInfo.thumbnail = thumbnail;
+      availableFieldsSnakeCase.push('thumbnail');
+    }
 
     // Return all available user data with snake_case keys
     const responseData = {

@@ -213,7 +213,12 @@ test_environment() {
     echo -e "   ${GREEN}✅ Tokens received${NC}"
     echo ""
     echo -e "${YELLOW}7️⃣  User Data ($ENV_NAME):${NC}"
-    echo "$USER_DATA" | jq '.'
+    # Show user data but truncate thumbnail if present
+    if echo "$USER_DATA" | jq -e '.thumbnail' > /dev/null 2>&1; then
+        echo "$USER_DATA" | jq '.thumbnail = if .thumbnail then (.thumbnail[0:50] + "...[truncated]") else null end' 2>/dev/null || echo "$USER_DATA"
+    else
+        echo "$USER_DATA" | jq '.'
+    fi
     echo ""
 
     # Test extended info endpoint
@@ -245,12 +250,22 @@ test_environment() {
         USER_INFO=$(echo "$EXTENDED_RESPONSE" | jq '.userInfo' 2>/dev/null)
         if [ ! -z "$USER_INFO" ] && [ "$USER_INFO" != "null" ]; then
             echo -e "   ${BLUE}User Info:${NC}"
-            echo "$USER_INFO" | jq '.'
+            # Truncate thumbnail if present
+            if echo "$USER_INFO" | jq -e '.thumbnail' > /dev/null 2>&1; then
+                echo "$USER_INFO" | jq '.thumbnail = if .thumbnail then (.thumbnail[0:50] + "...[truncated]") else null end' 2>/dev/null || echo "$USER_INFO"
+            else
+                echo "$USER_INFO" | jq '.'
+            fi
         else
             echo -e "   ${YELLOW}⚠️  No userInfo field in response${NC}"
             echo ""
             echo -e "   ${BLUE}Full response:${NC}"
-            echo "$EXTENDED_RESPONSE" | jq '.'
+            # Truncate thumbnail in full response if present
+            if echo "$EXTENDED_RESPONSE" | jq -e '.user_info.thumbnail' > /dev/null 2>&1; then
+                echo "$EXTENDED_RESPONSE" | jq '.user_info.thumbnail = if .user_info.thumbnail then (.user_info.thumbnail[0:50] + "...[truncated]") else null end' 2>/dev/null || echo "$EXTENDED_RESPONSE"
+            else
+                echo "$EXTENDED_RESPONSE" | jq '.'
+            fi
         fi
     else
         echo -e "   ${RED}❌ Extended info request failed${NC}"

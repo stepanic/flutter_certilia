@@ -2,6 +2,7 @@ import certiliaService from '../services/certiliaService.js';
 import tokenService from '../services/tokenService.js';
 import sessionService from '../services/sessionService.js';
 import pollingSessionService from '../services/pollingSessionService.js';
+import userDataService from '../services/userDataService.js';
 import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, generateState, generateNonce } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
 import { AuthenticationError, ValidationError } from '../utils/errors.js';
@@ -272,17 +273,19 @@ export const exchangeCode = async (req, res, next) => {
 
     // First decode ID token to get claims
     let idTokenClaims = {};
+    let thumbnail = null; // Store thumbnail separately to add to response later
     if (tokenResponse.id_token) {
       try {
         const decoded = tokenService.decodeToken(tokenResponse.id_token);
-        
+
         // Validate nonce if present
         if (decoded.nonce && decoded.nonce !== session.nonce) {
           throw new AuthenticationError('Invalid nonce in ID token');
         }
-        
-        // Remove thumbnail from decoded token to reduce JWT size
-        const { thumbnail, ...decodedWithoutThumbnail } = decoded;
+
+        // Extract and store thumbnail separately, remove from JWT to reduce size
+        thumbnail = decoded.thumbnail;
+        const { thumbnail: _, ...decodedWithoutThumbnail } = decoded;
 
         idTokenClaims = decodedWithoutThumbnail;
 
@@ -371,12 +374,11 @@ export const exchangeCode = async (req, res, next) => {
     // (ID token was already decoded above)
 
     // Generate our own JWT tokens with complete user data
-    // Don't include the full ID token in JWT to avoid size issues with ngrok/proxies
+    // Don't include ID token in JWT to avoid header size issues
     const certiliaTokensForJWT = {
       access_token: certiliaTokens.access_token,
       refresh_token: certiliaTokens.refresh_token,
-      // Only include ID token if needed (but it makes JWT huge)
-      id_token: process.env.INCLUDE_ID_TOKEN_IN_JWT === 'true' ? certiliaTokens.id_token : undefined,
+      // Omit ID token completely to avoid JWT size issues
       expires_in: certiliaTokens.expires_in,
       token_type: certiliaTokens.token_type
     };
@@ -384,7 +386,9 @@ export const exchangeCode = async (req, res, next) => {
     const completeUserInfo = {
       ...userInfo,
       ...idTokenClaims,
-      certilia_tokens: certiliaTokensForJWT, // Store tokens without huge ID token
+      // Do NOT include thumbnail in JWT to avoid size issues
+      // thumbnail will only be in the response, not in the JWT token
+      certilia_tokens: certiliaTokensForJWT, // Store tokens without ID token
     };
 
     // Debug: Log what we're putting in JWT
@@ -400,6 +404,11 @@ export const exchangeCode = async (req, res, next) => {
 
     const tokens = tokenService.generateTokenPair(completeUserInfo);
 
+    // Store thumbnail separately in userDataService (not in JWT)
+    if (thumbnail && userInfo.sub) {
+      userDataService.setUserThumbnail(userInfo.sub, thumbnail);
+    }
+
     // Clean up session
     sessionService.deleteSession(session_id);
 
@@ -414,6 +423,7 @@ export const exchangeCode = async (req, res, next) => {
         oib: userInfo.oib,
         email: userInfo.email,
         dateOfBirth: userInfo.dateOfBirth || userInfo.birthdate,
+        thumbnail: thumbnail, // Include thumbnail in response but not in JWT
       },
     });
   } catch (error) {

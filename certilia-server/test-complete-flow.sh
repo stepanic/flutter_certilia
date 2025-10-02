@@ -169,6 +169,36 @@ if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
     exit 1
 fi
 
+# Calculate header size
+HEADER_SIZE=$(echo -n "Authorization: Bearer $ACCESS_TOKEN" | wc -c)
+TOKEN_SIZE=$(echo -n "$ACCESS_TOKEN" | wc -c)
+echo -e "\n${BLUE}📏 JWT token size: ${TOKEN_SIZE} bytes${NC}"
+echo -e "${BLUE}📏 Full Authorization header size: ${HEADER_SIZE} bytes${NC}"
+
+if [ "$HEADER_SIZE" -gt 8000 ]; then
+    echo -e "${RED}⚠️ ⚠️ ⚠️  WARNING: HEADER SIZE EXCEEDS 8000 BYTES! ⚠️ ⚠️ ⚠️${NC}"
+    echo -e "${RED}This will cause issues with many HTTP servers and proxies!${NC}"
+    echo -e "${RED}Header size: ${HEADER_SIZE} bytes (limit: ~8000 bytes)${NC}"
+    echo -e "${YELLOW}The JWT token likely contains base64 encoded images or other large data.${NC}"
+
+    # Try to decode and analyze the JWT
+    echo -e "\n${YELLOW}Analyzing JWT payload...${NC}"
+    JWT_PAYLOAD=$(echo "$ACCESS_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        # Check if thumbnail exists in payload
+        if echo "$JWT_PAYLOAD" | grep -q "thumbnail"; then
+            echo -e "${RED}❌ JWT contains thumbnail field - this is causing the size issue!${NC}"
+            THUMB_SIZE=$(echo "$JWT_PAYLOAD" | grep -o '"thumbnail":"[^"]*"' | wc -c)
+            echo -e "${RED}Thumbnail field size: approximately ${THUMB_SIZE} bytes${NC}"
+        fi
+    fi
+    echo ""
+elif [ "$HEADER_SIZE" -gt 4000 ]; then
+    echo -e "${YELLOW}⚠️  Warning: Header size is getting large (${HEADER_SIZE} bytes)${NC}"
+else
+    echo -e "${GREEN}✅ Header size is acceptable${NC}"
+fi
+
 # Test basic user endpoint
 echo -e "\n${YELLOW}6. Testing basic user endpoint...${NC}"
 USER_RESPONSE=$(curl -s "$API_URL/auth/user" \
@@ -177,11 +207,18 @@ USER_RESPONSE=$(curl -s "$API_URL/auth/user" \
 
 echo -e "${GREEN}✅ Basic user info retrieved:${NC}"
 echo -e "${BLUE}Full basic user response:${NC}"
-# Show full response to debug differences between TEST and PROD
-echo "$USER_RESPONSE" | jq '.' 2>/dev/null || echo "$USER_RESPONSE"
+# Show full response but truncate thumbnail if present
+if echo "$USER_RESPONSE" | jq -e '.user.thumbnail' > /dev/null 2>&1; then
+    echo "$USER_RESPONSE" | jq '.user.thumbnail = if .user.thumbnail then (.user.thumbnail[0:50] + "...[truncated]") else null end' 2>/dev/null || echo "$USER_RESPONSE"
+else
+    echo "$USER_RESPONSE" | jq '.' 2>/dev/null || echo "$USER_RESPONSE"
+fi
 
 # Test extended user info endpoint
 echo -e "\n${YELLOW}7. Testing extended user info endpoint...${NC}"
+
+# Show header size again before the problematic request
+echo -e "${BLUE}📏 Sending request with Authorization header of ${HEADER_SIZE} bytes${NC}"
 
 EXTENDED_RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
   "$API_URL/user/extended-info" \
@@ -206,13 +243,17 @@ if [ "$HTTP_CODE" = "200" ]; then
 
     echo ""
     echo -e "${YELLOW}📊 Key field values (subset):${NC}"
-    # Show only essential fields, not the full verbose response
-    echo "$EXTENDED_BODY" | jq '{user_info: .user_info | {sub, given_name, family_name, oib, email, birthdate, mobile, formatted}, field_count: (.available_fields | length)}' 2>/dev/null || echo "Could not parse fields"
+    # Show only essential fields, not the full verbose response, and truncate thumbnail
+    echo "$EXTENDED_BODY" | jq '{user_info: .user_info | {sub, given_name, family_name, oib, email, birthdate, mobile, formatted, thumbnail: (if .thumbnail then (.thumbnail[0:50] + "...[truncated]") else null end)}, field_count: (.available_fields | length)}' 2>/dev/null || echo "Could not parse fields"
 
     echo ""
     echo -e "${YELLOW}📄 Full extended info response:${NC}"
-    # Show the complete response JSON formatted nicely
-    echo "$EXTENDED_BODY" | jq '.' 2>/dev/null || echo "$EXTENDED_BODY"
+    # Show the complete response JSON formatted nicely, truncating thumbnail if present
+    if echo "$EXTENDED_BODY" | jq -e '.user_info.thumbnail' > /dev/null 2>&1; then
+        echo "$EXTENDED_BODY" | jq '.user_info.thumbnail = if .user_info.thumbnail then (.user_info.thumbnail[0:50] + "...[truncated]") else null end' 2>/dev/null || echo "$EXTENDED_BODY"
+    else
+        echo "$EXTENDED_BODY" | jq '.' 2>/dev/null || echo "$EXTENDED_BODY"
+    fi
 
 else
     echo -e "${RED}❌ Failed to get extended user info${NC}"
