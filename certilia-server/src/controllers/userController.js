@@ -1,6 +1,4 @@
 import certiliaService from '../services/certiliaService.js';
-import tokenService from '../services/tokenService.js';
-import userDataService from '../services/userDataService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -57,23 +55,8 @@ export const getExtendedUserInfo = async (req, res, next) => {
 
     let userInfo;
     let source = 'userinfo_endpoint';
-    let thumbnail = null; // Store thumbnail from userDataService
     const skipUserInfo = process.env.SKIP_USERINFO_ENDPOINT === 'true';
     console.log('DEBUG 6: skipUserInfo:', skipUserInfo);
-
-    // Get user ID from JWT
-    const userId = req.user?.sub || req.userId;
-
-    // Get thumbnail from userDataService (not from JWT to avoid size issues)
-    if (userId) {
-      thumbnail = userDataService.getUserThumbnail(userId);
-      if (thumbnail) {
-        logger.info('Found thumbnail in userDataService', {
-          userId,
-          thumbnailSize: thumbnail.length
-        });
-      }
-    }
 
     // Check if we should skip userinfo endpoint
     if (skipUserInfo) {
@@ -197,13 +180,7 @@ export const getExtendedUserInfo = async (req, res, next) => {
     // Create available fields in snake_case
     const availableFieldsSnakeCase = Object.keys(snakeCaseUserInfo);
 
-    // Add thumbnail to user_info if available
-    if (thumbnail) {
-      snakeCaseUserInfo.thumbnail = thumbnail;
-      availableFieldsSnakeCase.push('thumbnail');
-    }
-
-    // Return all available user data with snake_case keys
+    // Return all available user data with snake_case keys (no thumbnail in extended-info)
     const responseData = {
       user_info: snakeCaseUserInfo,
       source, // Indicate where the data came from

@@ -2,7 +2,6 @@ import certiliaService from '../services/certiliaService.js';
 import tokenService from '../services/tokenService.js';
 import sessionService from '../services/sessionService.js';
 import pollingSessionService from '../services/pollingSessionService.js';
-import userDataService from '../services/userDataService.js';
 import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, generateState, generateNonce } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
 import { AuthenticationError, ValidationError } from '../utils/errors.js';
@@ -403,11 +402,6 @@ export const exchangeCode = async (req, res, next) => {
     });
 
     const tokens = tokenService.generateTokenPair(completeUserInfo);
-
-    // Store thumbnail separately in userDataService (not in JWT)
-    if (thumbnail && userInfo.sub) {
-      userDataService.setUserThumbnail(userInfo.sub, thumbnail);
-    }
 
     // Clean up session
     sessionService.deleteSession(session_id);
