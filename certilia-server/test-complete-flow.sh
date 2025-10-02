@@ -20,6 +20,9 @@ if [ -z "$NGROK_URL" ]; then
     read NGROK_URL
 fi
 
+# Normalize URL - remove trailing slash if present
+NGROK_URL="${NGROK_URL%/}"
+
 BASE_URL="$NGROK_URL"
 API_URL="$BASE_URL/api"
 

@@ -15,6 +15,9 @@ if [ -z "$NGROK_URL" ]; then
     read NGROK_URL
 fi
 
+# Normalize URL - remove trailing slash if present
+NGROK_URL="${NGROK_URL%/}"
+
 BASE_URL="$NGROK_URL"
 API_URL="$BASE_URL/api"
 
@@ -78,6 +81,9 @@ if [ -z "$NGROK_URL" ]; then
     echo -e "${YELLOW}Enter your ngrok URL (e.g., https://your-domain.ngrok-free.app):${NC}"
     read NGROK_URL
 fi
+
+# Normalize URL - remove trailing slash if present
+NGROK_URL="${NGROK_URL%/}"
 
 BASE_URL="$NGROK_URL"
 API_URL="$BASE_URL/api"
