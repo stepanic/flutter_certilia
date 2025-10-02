@@ -518,29 +518,7 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
         children: [
           Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      CertiliaTheme.primaryBlue,
-                      CertiliaTheme.primaryBlue.withValues(alpha: 0.7),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    user.firstName?.substring(0, 1).toUpperCase() ?? 'U',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
+              _buildUserAvatar(user, isDark),
               const SizedBox(width: CertiliaTheme.spaceMD),
               Expanded(
                 child: Column(
@@ -847,6 +825,67 @@ extension on _StatelessAuthViewState {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUserAvatar(CertiliaUser user, bool isDark) {
+    // Check for thumbnail in user.raw data or extended info
+    String? thumbnail = user.raw['thumbnail'] as String?;
+
+    // If we have extended info, check there too
+    if (thumbnail == null && _extendedInfo != null) {
+      thumbnail = _extendedInfo!.userInfo['thumbnail'] as String?;
+    }
+
+    if (thumbnail != null && thumbnail.isNotEmpty) {
+      // Remove data URL prefix if present
+      String base64String = thumbnail;
+      if (thumbnail.contains(',')) {
+        base64String = thumbnail.split(',')[1];
+      }
+
+      try {
+        final bytes = base64Decode(base64String);
+        return Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            image: DecorationImage(
+              image: MemoryImage(bytes),
+              fit: BoxFit.cover,
+            ),
+          ),
+        );
+      } catch (e) {
+        debugPrint('Error decoding thumbnail: $e');
+        // Fall through to default avatar
+      }
+    }
+
+    // Default avatar when no thumbnail is available
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            CertiliaTheme.primaryBlue,
+            CertiliaTheme.primaryBlue.withValues(alpha: 0.7),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Text(
+          user.firstName?.substring(0, 1).toUpperCase() ?? 'U',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
