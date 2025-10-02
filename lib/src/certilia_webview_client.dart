@@ -3,24 +3,20 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
-import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
 import 'models/certilia_extended_info.dart';
 
 /// WebView-based client for Certilia OAuth authentication
 /// This client opens authentication in an in-app WebView instead of external browser
+/// This is a STATELESS implementation - no tokens or user data are stored
 class CertiliaWebViewClient {
   /// Configuration for the client
   final CertiliaConfig config;
-
-  /// Secure storage for tokens
-  final FlutterSecureStorage _secureStorage;
 
   /// HTTP client for API requests
   final http.Client _httpClient;
@@ -28,48 +24,24 @@ class CertiliaWebViewClient {
   /// Server base URL (if using middleware server)
   final String? serverUrl;
 
-  /// Current authentication token
-  CertiliaToken? _currentToken;
-
-  /// Storage key for tokens
-  static const String _tokenStorageKey = 'certilia_token';
-
   /// Creates a new [CertiliaWebViewClient]
   CertiliaWebViewClient({
     required this.config,
     this.serverUrl,
-    FlutterSecureStorage? secureStorage,
     http.Client? httpClient,
-  })  : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
-        _httpClient = httpClient ?? http.Client() {
+  })  : _httpClient = httpClient ?? http.Client() {
     config.validate();
-    // Load saved tokens on initialization
-    _initializeTokens();
-  }
-  
-  /// Initialize tokens from storage
-  Future<void> _initializeTokens() async {
-    try {
-      await _loadToken();
-      if (_currentToken != null && !_currentToken!.isExpired) {
-        _log('Loaded saved authentication token');
-      } else if (_currentToken != null && _currentToken!.isExpired) {
-        _log('Saved token is expired');
-        // Don't automatically refresh here - let the app decide
-      }
-    } catch (e) {
-      _log('Failed to load saved tokens: $e');
-    }
   }
 
-  /// Authenticates the user using WebView and returns their profile
-  Future<CertiliaUser> authenticate(BuildContext context) async {
+  /// Authenticates the user using WebView and returns auth data
+  /// This is a STATELESS operation - the caller must handle token storage
+  Future<Map<String, dynamic>> authenticate(BuildContext context) async {
     try {
       _log('Starting WebView authentication flow');
 
       // Initialize OAuth flow
       final authData = await _initializeOAuthFlow();
-      
+
       // Show WebView for authentication
       if (!context.mounted) {
         throw const CertiliaAuthenticationException(
@@ -103,35 +75,25 @@ class CertiliaWebViewClient {
         }
       }
 
-      // Create token object
-      _currentToken = CertiliaToken(
-        accessToken: tokenData['accessToken'],
-        refreshToken: tokenData['refreshToken'],
-        idToken: tokenData['idToken'],
-        expiresAt: tokenData['expiresIn'] != null
-            ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
-            : null,
-        tokenType: tokenData['tokenType'] ?? 'Bearer',
-      );
-
-      // Save token
-      await _saveToken(_currentToken!);
-
-      // Extract user from token data or fetch separately
-      final user = tokenData['user'] != null
-          ? CertiliaUser.fromJson(tokenData['user'])
-          : await _fetchUserInfo(_currentToken!.accessToken);
-
-      _log('Authentication successful for user: ${user.sub}');
-      return user;
+      // Return all auth data for caller to handle
+      // Caller is responsible for storing tokens if needed
+      _log('✅ Authentication successful');
+      return {
+        'accessToken': tokenData['accessToken'],
+        'refreshToken': tokenData['refreshToken'],
+        'idToken': tokenData['idToken'],
+        'expiresIn': tokenData['expiresIn'],
+        'tokenType': tokenData['tokenType'] ?? 'Bearer',
+        'user': tokenData['user'],
+      };
     } catch (e) {
       _log('Authentication failed: $e');
-      
+
       // Make sure to close any loading dialog
       if (context.mounted && Navigator.canPop(context)) {
         Navigator.pop(context);
       }
-      
+
       if (e is CertiliaException) {
         rethrow;
       }
@@ -150,17 +112,21 @@ class CertiliaWebViewClient {
       );
     }
 
+    final initUrl = '$serverUrl/api/auth/initialize?response_type=code&redirect_uri=$serverUrl/api/auth/callback';
+    _log('🚀 Initializing OAuth flow: $initUrl');
+
     // Create a fresh HTTP client for this request
     final client = http.Client();
     try {
       final response = await client.get(
-        Uri.parse('$serverUrl/api/auth/initialize?response_type=code&redirect_uri=$serverUrl/api/auth/callback'),
+        Uri.parse(initUrl),
         headers: {
           'ngrok-skip-browser-warning': 'true',
         },
       ).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
+          _log('⏱️ Initialize request timed out');
           throw CertiliaNetworkException(
             message: 'Initialize request timed out',
             statusCode: 408,
@@ -168,8 +134,11 @@ class CertiliaWebViewClient {
           );
         },
       );
-      
+
+      _log('📥 Initialize response status: ${response.statusCode}');
+
       if (response.statusCode != 200) {
+        _log('❌ Initialize failed: ${response.body}');
         throw CertiliaNetworkException(
           message: 'Failed to initialize OAuth flow',
           statusCode: response.statusCode,
@@ -177,7 +146,9 @@ class CertiliaWebViewClient {
         );
       }
 
-      return jsonDecode(response.body);
+      final data = jsonDecode(response.body);
+      _log('✅ OAuth initialized - Session ID: ${data['session_id']}, State: ${data['state']}');
+      return data;
     } finally {
       client.close();
     }
@@ -243,32 +214,39 @@ class CertiliaWebViewClient {
       );
     }
 
+    _log('🔄 Starting token exchange - Code: ${code.substring(0, 10 > code.length ? code.length : 10)}..., State: $state, Session: $sessionId');
+
     // Retry logic for flaky network connections
     int retries = 3;
     http.Response? response;
     Exception? lastError;
-    
+
     for (int i = 0; i < retries; i++) {
       try {
-        _log('Token exchange attempt ${i + 1} of $retries');
-        
+        _log('🔄 Token exchange attempt ${i + 1} of $retries');
+
         // Create a new HTTP client for each retry attempt
         final client = http.Client();
         try {
+          final exchangeBody = {
+            'code': code,
+            'state': state,
+            'session_id': sessionId,
+          };
+          _log('📤 Sending exchange request to: $serverUrl/api/auth/exchange');
+          _log('📤 Request body: ${jsonEncode(exchangeBody)}');
+
           response = await client.post(
             Uri.parse('$serverUrl/api/auth/exchange'),
             headers: {
               'Content-Type': 'application/json',
               'ngrok-skip-browser-warning': 'true',
             },
-            body: jsonEncode({
-              'code': code,
-              'state': state,
-              'session_id': sessionId,
-            }),
+            body: jsonEncode(exchangeBody),
           ).timeout(
             const Duration(seconds: 30),
             onTimeout: () {
+              _log('⏱️ Token exchange timed out after 30 seconds');
               throw CertiliaNetworkException(
                 message: 'Token exchange timed out',
                 statusCode: 408,
@@ -276,7 +254,9 @@ class CertiliaWebViewClient {
               );
             },
           );
-          
+
+          _log('📥 Exchange response status: ${response.statusCode}');
+
           // If we got a response, break out of retry loop
           break;
         } finally {
@@ -284,16 +264,17 @@ class CertiliaWebViewClient {
         }
       } catch (e) {
         lastError = e as Exception;
-        _log('Token exchange attempt ${i + 1} failed: $e');
-        
+        _log('❌ Token exchange attempt ${i + 1} failed: $e');
+
         // If this isn't the last retry, wait before trying again
         if (i < retries - 1) {
           await Future.delayed(Duration(seconds: i + 1));
         }
       }
     }
-    
+
     if (response == null) {
+      _log('💥 All token exchange attempts failed');
       throw lastError ?? CertiliaNetworkException(
         message: 'Failed to exchange code for tokens after $retries attempts',
         statusCode: 0,
@@ -302,6 +283,7 @@ class CertiliaWebViewClient {
     }
 
     if (response.statusCode != 200) {
+      _log('❌ Token exchange failed with status ${response.statusCode}: ${response.body}');
       throw CertiliaNetworkException(
         message: 'Failed to exchange code for tokens',
         statusCode: response.statusCode,
@@ -309,60 +291,34 @@ class CertiliaWebViewClient {
       );
     }
 
-    return jsonDecode(response.body);
-  }
-
-  /// Checks if the user is currently authenticated
-  bool get isAuthenticated {
-    return _currentToken != null && !_currentToken!.isExpired;
-  }
-  
-  /// Checks authentication status including loading from storage
-  Future<bool> checkAuthenticationStatus() async {
-    if (_currentToken == null) {
-      await _loadToken();
+    final data = jsonDecode(response.body);
+    _log('✅ Token exchange successful');
+    _log('🔐 Received tokens - hasAccessToken: ${data['accessToken'] != null}, hasRefreshToken: ${data['refreshToken'] != null}, hasIdToken: ${data['idToken'] != null}');
+    if (data['user'] != null) {
+      _log('👤 User data received: ${(data['user'] as Map).keys.toList()}');
     }
-    return isAuthenticated;
+
+    return data;
   }
 
-  /// Gets the current authenticated user
-  Future<CertiliaUser?> getCurrentUser() async {
+  /// Fetches current user info using an access token
+  /// This is a STATELESS operation - caller must provide valid token
+  Future<CertiliaUser?> getUserInfo(String accessToken) async {
     try {
-      // Load token if not in memory
-      if (_currentToken == null) {
-        await _loadToken();
-      }
-
-      if (_currentToken == null) {
-        return null;
-      }
-
-      // Check if token is expired
-      if (_currentToken!.isExpired) {
-        // Try to refresh
-        if (_currentToken!.refreshToken != null) {
-          await refreshToken();
-        } else {
-          return null;
-        }
-      }
-
-      // Fetch user info
-      return await _fetchUserInfo(_currentToken!.accessToken);
+      _log('📝 Getting user info with provided token...');
+      return await _fetchUserInfo(accessToken);
     } catch (e) {
-      _log('Failed to get current user: $e');
+      _log('❌ Failed to get user info: $e');
       return null;
     }
   }
 
   /// Refreshes the access token using the refresh token
-  Future<void> refreshToken() async {
-    if (_currentToken?.refreshToken == null) {
-      throw const CertiliaAuthenticationException(
-        message: 'No refresh token available',
-      );
-    }
-
+  /// This is a STATELESS operation - caller must provide tokens and handle storage
+  Future<Map<String, dynamic>> refreshToken({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
     if (serverUrl == null) {
       throw const CertiliaException(
         message: 'Server URL is required for token refresh',
@@ -370,7 +326,7 @@ class CertiliaWebViewClient {
     }
 
     try {
-      _log('Refreshing token');
+      _log('🔄 Refreshing token');
 
       // Create a fresh HTTP client for this request
       final client = http.Client();
@@ -379,12 +335,11 @@ class CertiliaWebViewClient {
           Uri.parse('$serverUrl/api/auth/refresh'),
           headers: {
             'Content-Type': 'application/json',
-            // Include current access token so server can extract certilia tokens
-            'Authorization': 'Bearer ${_currentToken!.accessToken}',
+            'Authorization': 'Bearer $accessToken',
             'ngrok-skip-browser-warning': 'true',
           },
           body: jsonEncode({
-            'refresh_token': _currentToken!.refreshToken,
+            'refresh_token': refreshToken,
           }),
         ).timeout(
           const Duration(seconds: 10),
@@ -406,22 +361,22 @@ class CertiliaWebViewClient {
         }
 
         final tokenData = jsonDecode(response.body);
+        _log('✅ Token refreshed successfully');
+        _log('📝 Response data: ${jsonEncode(tokenData)}');
 
-        // Update token
-        _currentToken = CertiliaToken(
-          accessToken: tokenData['accessToken'],
-          refreshToken: tokenData['refreshToken'] ?? _currentToken!.refreshToken,
-          idToken: tokenData['idToken'],
-          expiresAt: tokenData['expiresIn'] != null
-              ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
-              : null,
-          tokenType: tokenData['tokenType'] ?? 'Bearer',
-        );
+        // Log token details
+        _log('🔑 New Access Token (first 20): ${tokenData['accessToken']?.toString().substring(0, 20)}...');
+        _log('🔑 Has Refresh Token: ${tokenData['refreshToken'] != null}');
+        _log('⏰ Expires In: ${tokenData['expiresIn']} seconds');
 
-        // Save updated token
-        await _saveToken(_currentToken!);
-
-        _log('Token refreshed successfully');
+        // Return refreshed token data for caller to handle
+        return {
+          'accessToken': tokenData['accessToken'],
+          'refreshToken': tokenData['refreshToken'] ?? refreshToken,
+          'idToken': tokenData['idToken'],
+          'expiresIn': tokenData['expiresIn'],
+          'tokenType': tokenData['tokenType'] ?? 'Bearer',
+        };
       } finally {
         client.close();
       }
@@ -437,48 +392,17 @@ class CertiliaWebViewClient {
     }
   }
 
-  /// Logs out the user and clears stored tokens
-  Future<void> logout() async {
+  /// Get extended user information using an access token
+  /// This is a STATELESS operation - caller must provide valid token
+  Future<CertiliaExtendedInfo?> getExtendedUserInfo(String accessToken) async {
     try {
-      _log('Logging out user');
-
-      // Clear token from memory
-      _currentToken = null;
-
-      // Clear token from storage
-      await _secureStorage.delete(key: _tokenStorageKey);
-
-      _log('Logout successful');
-    } catch (e) {
-      _log('Logout failed: $e');
-      throw CertiliaException(
-        message: 'Failed to logout',
-        details: e.toString(),
-      );
-    }
-  }
-  
-  /// Get extended user information
-  /// This includes all available fields from Certilia API
-  Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
-    try {
-      // Check if we have a valid token
-      if (_currentToken == null) {
-        await _loadToken();
-      }
-
-      if (_currentToken == null || _currentToken!.isExpired) {
-        _log('No valid token available for extended info');
-        return null;
-      }
-
       if (serverUrl == null) {
         throw const CertiliaException(
           message: 'Server URL is required for extended user info',
         );
       }
 
-      _log('Fetching extended user info');
+      _log('📡 Fetching extended user info from: $serverUrl/api/user/extended-info');
 
       // Create a fresh HTTP client for this request
       final client = http.Client();
@@ -486,48 +410,28 @@ class CertiliaWebViewClient {
         final response = await client.get(
           Uri.parse('$serverUrl/api/user/extended-info'),
           headers: {
-            'Authorization': 'Bearer ${_currentToken!.accessToken}',
+            'Authorization': 'Bearer $accessToken',
             'ngrok-skip-browser-warning': 'true',
           },
         );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _log('Extended user info fetched successfully');
-        _log('Available fields: ${data['availableFields']}');
-        return CertiliaExtendedInfo.fromJson(data);
-      } else if (response.statusCode == 401 || response.statusCode == 502) {
-        _log('Token expired or invalid (${response.statusCode})');
-        
-        // Check if error indicates expired token
-        if (response.body.contains('Invalid or expired access token')) {
-          _log('Token is definitely expired, clearing authentication');
-          // Clear invalid tokens
-          await logout();
+        _log('📥 Response status code: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          _log('✅ Extended user info fetched successfully');
+          return CertiliaExtendedInfo.fromJson(data);
+        } else if (response.statusCode == 401 || response.statusCode == 502) {
+          _log('⚠️ Token might be expired or server error (${response.statusCode})');
           return null;
+        } else {
+          _log('Failed to fetch extended user info: ${response.statusCode}');
+          throw CertiliaNetworkException(
+            message: 'Failed to fetch extended user info',
+            statusCode: response.statusCode,
+            details: response.body,
+          );
         }
-        
-        // Try to refresh if we have a refresh token
-        if (_currentToken!.refreshToken != null) {
-          try {
-            await refreshToken();
-            // Retry with new token
-            return getExtendedUserInfo();
-          } catch (refreshError) {
-            _log('Refresh failed, clearing authentication: $refreshError');
-            await logout();
-            return null;
-          }
-        }
-        return null;
-      } else {
-        _log('Failed to fetch extended user info: ${response.statusCode}');
-        throw CertiliaNetworkException(
-          message: 'Failed to fetch extended user info',
-          statusCode: response.statusCode,
-          details: response.body,
-        );
-      }
       } finally {
         client.close();
       }
@@ -587,28 +491,6 @@ class CertiliaWebViewClient {
     }
   }
 
-  /// Saves token to secure storage
-  Future<void> _saveToken(CertiliaToken token) async {
-    try {
-      final tokenJson = jsonEncode(token.toJson());
-      await _secureStorage.write(key: _tokenStorageKey, value: tokenJson);
-    } catch (e) {
-      _log('Failed to save token: $e');
-    }
-  }
-
-  /// Loads token from secure storage
-  Future<void> _loadToken() async {
-    try {
-      final tokenJson = await _secureStorage.read(key: _tokenStorageKey);
-      if (tokenJson != null) {
-        final tokenData = jsonDecode(tokenJson) as Map<String, dynamic>;
-        _currentToken = CertiliaToken.fromJson(tokenData);
-      }
-    } catch (e) {
-      _log('Failed to load token: $e');
-    }
-  }
 
   /// Logs a message if logging is enabled
   void _log(String message) {
@@ -620,17 +502,6 @@ class CertiliaWebViewClient {
     }
   }
 
-  /// Gets the current access token
-  String? get currentAccessToken => _currentToken?.accessToken;
-  
-  /// Gets the current refresh token
-  String? get currentRefreshToken => _currentToken?.refreshToken;
-  
-  /// Gets the current ID token
-  String? get currentIdToken => _currentToken?.idToken;
-  
-  /// Gets the token expiry time
-  DateTime? get tokenExpiry => _currentToken?.expiresAt;
 
   /// Disposes of resources
   void dispose() {

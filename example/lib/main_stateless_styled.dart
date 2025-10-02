@@ -1,11 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_certilia/flutter_certilia.dart';
-// ignore: implementation_imports
 import 'package:flutter_certilia/src/certilia_stateful_wrapper.dart';
-// ignore: implementation_imports
 import 'package:flutter_certilia/src/certilia_webview_client.dart';
+import 'package:flutter_certilia/src/models/certilia_config.dart';
 
 void main() {
   runApp(const MyApp());
@@ -19,8 +17,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // Default to dark theme
-  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode _themeMode = ThemeMode.light;
 
   void _toggleTheme() {
     setState(() {
@@ -33,7 +30,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Certilia SDK Example',
+      title: 'Certilia SDK Demo',
       theme: CertiliaTheme.lightTheme,
       darkTheme: CertiliaTheme.darkTheme,
       themeMode: _themeMode,
@@ -96,8 +93,8 @@ class HomePage extends StatelessWidget {
   }
 }
 
-/// Main stateless auth view wrapper with language state
-class _StatelessAuthView extends StatefulWidget {
+/// Main stateless auth view
+class _StatelessAuthView extends StatelessWidget {
   final VoidCallback onThemeToggle;
   final bool hasStoredToken;
   final CertiliaUser? storedUser;
@@ -109,55 +106,26 @@ class _StatelessAuthView extends StatefulWidget {
   });
 
   @override
-  State<_StatelessAuthView> createState() => _StatelessAuthViewState();
-}
-
-class _StatelessAuthViewState extends State<_StatelessAuthView> {
-  bool _isEnglish = false;
-  DateTime? _tokenExpiry;
-  String? _currentAccessToken;
-  String? _currentRefreshToken;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTokenInfo();
-  }
-
-  Future<void> _loadTokenInfo() async {
-    final accessToken = await CertiliaStatefulWrapper.getStoredAccessToken();
-    final refreshToken = await CertiliaStatefulWrapper.getStoredRefreshToken();
-    final expiry = await CertiliaStatefulWrapper.getStoredTokenExpiry();
-
-    if (mounted) {
-      setState(() {
-        _currentAccessToken = accessToken;
-        _currentRefreshToken = refreshToken;
-        _tokenExpiry = expiry;
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEnglish = Localizations.localeOf(context).languageCode != 'hr';
 
     return Scaffold(
       backgroundColor: CertiliaTheme.backgroundColor(isDark),
       body: Column(
         children: [
-          _buildHeader(isDark),
+          _buildHeader(context, isDark, isEnglish),
           Expanded(
-            child: widget.hasStoredToken && widget.storedUser != null
-                ? _buildAuthenticatedView(context, widget.storedUser!, isDark, _isEnglish)
-                : _buildUnauthenticatedView(context, isDark, _isEnglish),
+            child: hasStoredToken && storedUser != null
+                ? _buildAuthenticatedView(context, storedUser!, isDark, isEnglish)
+                : _buildUnauthenticatedView(context, isDark, isEnglish),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildHeader(bool isDark) {
+  Widget _buildHeader(BuildContext context, bool isDark, bool isEnglish) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: CertiliaTheme.spaceLG,
@@ -210,88 +178,19 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
                 ),
               ],
             ),
-            // Theme and language toggles
-            Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    isDark ? Icons.light_mode : Icons.dark_mode,
-                    size: 20,
-                  ),
-                  color: CertiliaTheme.textSecondaryColor(isDark),
-                  onPressed: widget.onThemeToggle,
-                  tooltip: isDark
-                    ? (_isEnglish ? 'Light mode' : 'Svijetli način')
-                    : (_isEnglish ? 'Dark mode' : 'Tamni način'),
-                ),
-                const SizedBox(width: CertiliaTheme.spaceSM),
-                _buildLanguageToggle(isDark),
-              ],
+            // Theme toggle
+            IconButton(
+              icon: Icon(
+                isDark ? Icons.light_mode : Icons.dark_mode,
+                size: 20,
+              ),
+              color: CertiliaTheme.textSecondaryColor(isDark),
+              onPressed: onThemeToggle,
+              tooltip: isDark
+                ? (isEnglish ? 'Light mode' : 'Svijetli način')
+                : (isEnglish ? 'Dark mode' : 'Tamni način'),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  /// Build language toggle button group
-  Widget _buildLanguageToggle(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: CertiliaTheme.borderColor(isDark)),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          _buildLanguageButton('HR', !_isEnglish, isDark, isFirst: true),
-          Container(
-            width: 1,
-            height: 24,
-            color: CertiliaTheme.borderColor(isDark),
-          ),
-          _buildLanguageButton('EN', _isEnglish, isDark, isLast: true),
-        ],
-      ),
-    );
-  }
-
-  /// Build individual language button
-  Widget _buildLanguageButton(
-    String label,
-    bool isActive,
-    bool isDark, {
-    bool isFirst = false,
-    bool isLast = false,
-  }) {
-    return InkWell(
-      onTap: () => setState(() => _isEnglish = label == 'EN'),
-      borderRadius: BorderRadius.horizontal(
-        left: isFirst ? const Radius.circular(5) : Radius.zero,
-        right: isLast ? const Radius.circular(5) : Radius.zero,
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 6,
-        ),
-        decoration: BoxDecoration(
-          color: isActive
-            ? CertiliaTheme.primaryBlue
-            : Colors.transparent,
-          borderRadius: BorderRadius.horizontal(
-            left: isFirst ? const Radius.circular(5) : Radius.zero,
-            right: isLast ? const Radius.circular(5) : Radius.zero,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isActive
-              ? Colors.white
-              : CertiliaTheme.textSecondaryColor(isDark),
-          ),
         ),
       ),
     );
@@ -565,7 +464,7 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => _refreshToken(context, isEnglish),
+              onPressed: () => _refreshToken(context),
               icon: const Icon(Icons.refresh, size: 18),
               label: Text(
                 isEnglish ? 'Refresh Token' : 'Osvježi token',
@@ -612,354 +511,51 @@ class _StatelessAuthViewState extends State<_StatelessAuthView> {
   }
 
   Widget _buildTokenCard(BuildContext context, bool isDark, bool isEnglish) {
-    return _TokenCardWithTimer(
-      isDark: isDark,
-      isEnglish: isEnglish,
-      accessToken: _currentAccessToken,
-      refreshToken: _currentRefreshToken,
-      tokenExpiry: _tokenExpiry,
-    );
-  }
-}
-
-// Separate stateful widget for token card with timer
-class _TokenCardWithTimer extends StatefulWidget {
-  final bool isDark;
-  final bool isEnglish;
-  final String? accessToken;
-  final String? refreshToken;
-  final DateTime? tokenExpiry;
-
-  const _TokenCardWithTimer({
-    required this.isDark,
-    required this.isEnglish,
-    this.accessToken,
-    this.refreshToken,
-    this.tokenExpiry,
-  });
-
-  @override
-  State<_TokenCardWithTimer> createState() => _TokenCardWithTimerState();
-}
-
-class _TokenCardWithTimerState extends State<_TokenCardWithTimer> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    // Update every second for real-time countdown
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          // Just trigger rebuild to update countdown
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  Future<Map<String, dynamic>> _getTokenInfo() async {
-    try {
-      final accessToken = await CertiliaStatefulWrapper.getStoredAccessToken();
-      final refreshToken = await CertiliaStatefulWrapper.getStoredRefreshToken();
-      final expiryTime = await CertiliaStatefulWrapper.getStoredTokenExpiry();
-
-      return {
-        'accessToken': accessToken,
-        'refreshToken': refreshToken,
-        'expiryTime': expiryTime,
-      };
-    } catch (e) {
-      return {};
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Use widget parameters directly instead of loading from storage
-    final accessToken = widget.accessToken;
-    final refreshToken = widget.refreshToken;
-    final expiryTime = widget.tokenExpiry;
-
-    if (accessToken == null && refreshToken == null) {
-      // Load initial data if nothing passed
-      return FutureBuilder<Map<String, dynamic>>(
-        future: _getTokenInfo(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return _buildCard(
-              isDark: widget.isDark,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
-
-          return _buildTokenContent(
-            snapshot.data!['accessToken'] as String?,
-            snapshot.data!['refreshToken'] as String?,
-            snapshot.data!['expiryTime'] as DateTime?,
-          );
-        },
-      );
-    }
-
-    return _buildTokenContent(accessToken, refreshToken, expiryTime);
-  }
-
-  Widget _buildTokenContent(String? accessToken, String? refreshToken, DateTime? expiryTime) {
-
     return _buildCard(
-      isDark: widget.isDark,
+      isDark: isDark,
       child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.vpn_key,
-                    size: 20,
-                    color: CertiliaTheme.primaryBlue,
-                  ),
-                  const SizedBox(width: CertiliaTheme.spaceSM),
-                  Text(
-                    widget.isEnglish ? 'Token Status' : 'Status tokena',
-                    style: CertiliaTextStyles.subheading(widget.isDark),
-                  ),
-                ],
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isEnglish ? 'Token Status' : 'Status tokena',
+            style: CertiliaTextStyles.subheading(isDark),
+          ),
+          const SizedBox(height: CertiliaTheme.spaceLG),
+
+          Container(
+            padding: const EdgeInsets.all(CertiliaTheme.spaceMD),
+            decoration: BoxDecoration(
+              color: CertiliaTheme.successGreen.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(CertiliaTheme.radiusSmall),
+              border: Border.all(
+                color: CertiliaTheme.successGreen.withValues(alpha: 0.3),
               ),
-              const SizedBox(height: CertiliaTheme.spaceLG),
-
-              // Token validity status
-              if (expiryTime != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(CertiliaTheme.spaceSM),
-                  decoration: BoxDecoration(
-                    color: _isTokenExpiringSoon(expiryTime)
-                        ? CertiliaTheme.warningOrange.withValues(alpha: 0.1)
-                        : CertiliaTheme.successGreen.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(CertiliaTheme.radiusSmall),
-                    border: Border.all(
-                      color: _isTokenExpiringSoon(expiryTime)
-                          ? CertiliaTheme.warningOrange
-                          : CertiliaTheme.successGreen,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 16,
-                        color: _isTokenExpiringSoon(expiryTime)
-                            ? CertiliaTheme.warningOrange
-                            : CertiliaTheme.successGreen,
-                      ),
-                      const SizedBox(width: CertiliaTheme.spaceSM),
-                      Expanded(
-                        child: Text(
-                          _getTokenExpiryText(expiryTime, widget.isEnglish),
-                          style: CertiliaTextStyles.bodySmall(widget.isDark).copyWith(
-                            color: _isTokenExpiringSoon(expiryTime)
-                                ? CertiliaTheme.warningOrange
-                                : CertiliaTheme.successGreen,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: CertiliaTheme.spaceSM),
-                Text(
-                  '${widget.isEnglish ? 'Expires at' : 'Ističe'}: ${_formatDateTime(expiryTime)}',
-                  style: CertiliaTextStyles.bodySmall(widget.isDark),
-                ),
-                const SizedBox(height: CertiliaTheme.spaceLG),
-              ],
-
-              // Access Token
-              if (accessToken != null) ...[
-                _buildTokenDisplay(
-                  widget.isEnglish ? 'Access Token' : 'Pristupni token',
-                  accessToken,
-                  widget.isDark,
-                ),
-                const SizedBox(height: CertiliaTheme.spaceMD),
-              ],
-
-              // Refresh Token
-              if (refreshToken != null) ...[
-                _buildTokenDisplay(
-                  widget.isEnglish ? 'Refresh Token' : 'Token za osvježavanje',
-                  refreshToken,
-                  widget.isDark,
-                ),
-              ],
-            ],
-          ),
-        );
-  }
-
-  Widget _buildTokenDisplay(String label, String token, bool isDark) {
-    final truncatedToken = token.length > 30
-        ? '${token.substring(0, 15)}...${token.substring(token.length - 15)}'
-        : token;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: CertiliaTextStyles.labelSmall(isDark)),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: CertiliaTheme.spaceSM,
-            vertical: CertiliaTheme.spaceSM,
-          ),
-          decoration: BoxDecoration(
-            color: CertiliaTheme.surfaceGrayColor(isDark),
-            borderRadius: BorderRadius.circular(CertiliaTheme.radiusSmall),
-            border: Border.all(
-              color: CertiliaTheme.borderColor(isDark),
             ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  truncatedToken,
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    color: CertiliaTheme.textSecondaryColor(isDark),
-                  ),
-                  overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: CertiliaTheme.successGreen,
+                  size: 20,
                 ),
-              ),
-              const SizedBox(width: CertiliaTheme.spaceSM),
-              InkWell(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: token));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        widget.isEnglish
-                            ? 'Copied to clipboard'
-                            : 'Kopirano u međuspremnik',
-                      ),
-                      backgroundColor: CertiliaTheme.successGreen,
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 2),
+                const SizedBox(width: CertiliaTheme.spaceSM),
+                Expanded(
+                  child: Text(
+                    isEnglish ? 'Valid token stored' : 'Valjan token spremljen',
+                    style: CertiliaTextStyles.bodySmall(isDark).copyWith(
+                      color: CertiliaTheme.successGreen,
+                      fontWeight: FontWeight.w500,
                     ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.copy,
-                    size: 16,
-                    color: CertiliaTheme.primaryBlue,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Helper methods moved to _TokenCardWithTimerState
-  Widget _buildCard({
-    required Widget child,
-    required bool isDark,
-    double? maxWidth,
-  }) {
-    Widget card = Container(
-      decoration: BoxDecoration(
-        color: CertiliaTheme.surfaceColor(isDark),
-        borderRadius: BorderRadius.circular(CertiliaTheme.radiusLarge),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.2)
-                : Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+              ],
+            ),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(CertiliaTheme.spaceLG),
-      child: child,
     );
-
-    if (maxWidth != null) {
-      card = Container(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: card,
-      );
-    }
-
-    return card;
   }
 
-  bool _isTokenExpiringSoon(DateTime expiryTime) {
-    final timeUntilExpiry = expiryTime.difference(DateTime.now());
-    return timeUntilExpiry.inMinutes < 5;
-  }
-
-  String _getTokenExpiryText(DateTime expiryTime, bool isEnglish) {
-    final timeUntilExpiry = expiryTime.difference(DateTime.now());
-
-    if (timeUntilExpiry.isNegative) {
-      return isEnglish ? 'Token expired' : 'Token je istekao';
-    }
-
-    // Always show in seconds for precise granularity
-    final totalSeconds = timeUntilExpiry.inSeconds;
-
-    if (totalSeconds >= 86400) { // More than a day
-      final days = totalSeconds ~/ 86400;
-      final hours = (totalSeconds % 86400) ~/ 3600;
-      final minutes = (totalSeconds % 3600) ~/ 60;
-      final seconds = totalSeconds % 60;
-      return isEnglish
-          ? 'Expires in ${days}d ${hours}h ${minutes}m ${seconds}s'
-          : 'Ističe za ${days}d ${hours}h ${minutes}m ${seconds}s';
-    } else if (totalSeconds >= 3600) { // More than an hour
-      final hours = totalSeconds ~/ 3600;
-      final minutes = (totalSeconds % 3600) ~/ 60;
-      final seconds = totalSeconds % 60;
-      return isEnglish
-          ? 'Expires in ${hours}h ${minutes}m ${seconds}s'
-          : 'Ističe za ${hours}h ${minutes}m ${seconds}s';
-    } else if (totalSeconds >= 60) { // More than a minute
-      final minutes = totalSeconds ~/ 60;
-      final seconds = totalSeconds % 60;
-      return isEnglish
-          ? 'Expires in ${minutes}m ${seconds}s'
-          : 'Ističe za ${minutes}m ${seconds}s';
-    } else { // Less than a minute
-      return isEnglish
-          ? 'Expires in ${totalSeconds}s'
-          : 'Ističe za ${totalSeconds}s';
-    }
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    return '${local.day}.${local.month}.${local.year} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
-}
-
-// Extension methods for _StatelessAuthViewState continue below
-extension on _StatelessAuthViewState {
   Widget _buildInfoRow(IconData icon, String label, String value, bool isDark) {
     return Padding(
       padding: const EdgeInsets.only(bottom: CertiliaTheme.spaceMD),
@@ -1027,22 +623,9 @@ extension on _StatelessAuthViewState {
 
   // Action methods
   Future<void> _authenticate(BuildContext context) async {
-    try {
-      // Show loading dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 20),
-              Text('Initializing...'),
-            ],
-          ),
-        ),
-      );
+    _showLoadingDialog(context, 'Authenticating...');
 
+    try {
       final certilia = await CertiliaSDKSimple.initialize(
         clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
         serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
@@ -1051,17 +634,9 @@ extension on _StatelessAuthViewState {
       );
 
       if (!context.mounted) return;
+      Navigator.pop(context); // Close loading
 
-      // Close loading dialog before showing WebView
-      Navigator.pop(context);
-
-      // Small delay to ensure dialog is closed
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (!context.mounted) return;
-
-      // Now show the WebView for authentication
-      await certilia.authenticate(context);
+      final user = await certilia.authenticate(context);
 
       if (!context.mounted) return;
 
@@ -1069,32 +644,13 @@ extension on _StatelessAuthViewState {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
+          builder: (context) => HomePage(onThemeToggle: onThemeToggle),
         ),
       );
-    } on CertiliaAuthenticationException catch (e) {
-      // User cancelled or authentication failed
-      if (!context.mounted) return;
-
-      // Check if dialog is still open and close it
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
-
-      // Only show error if it's not a cancellation
-      if (!e.message.toLowerCase().contains('cancel') &&
-          !e.message.toLowerCase().contains('dismissed')) {
-        _showErrorDialog(context, 'Authentication failed: ${e.message}');
-      }
     } catch (e) {
       if (!context.mounted) return;
-
-      // Check if dialog is still open and close it
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
-
-      _showErrorDialog(context, 'Error: $e');
+      Navigator.pop(context);
+      _showErrorDialog(context, 'Authentication failed: $e');
     }
   }
 
@@ -1133,13 +689,18 @@ extension on _StatelessAuthViewState {
     }
   }
 
-  Future<void> _refreshToken(BuildContext context, bool isEnglish) async {
-    final message = isEnglish ? 'Refreshing token...' : 'Osvježavanje tokena...';
-    _showLoadingDialog(context, message);
+  Future<void> _refreshToken(BuildContext context) async {
+    _showLoadingDialog(context, 'Refreshing token...');
 
     try {
-      // Initialize SDK with state management
-      final wrapper = CertiliaStatefulWrapper(
+      final accessToken = await CertiliaStatefulWrapper.getStoredAccessToken();
+      final refreshToken = await CertiliaStatefulWrapper.getStoredRefreshToken();
+
+      if (accessToken == null || refreshToken == null) {
+        throw Exception('No tokens available');
+      }
+
+      final client = CertiliaWebViewClient(
         config: CertiliaConfig(
           clientId: '991dffbb1cdd4d51423e1a5de323f13b15256c63',
           redirectUrl: 'https://uniformly-credible-opossum.ngrok-free.app/api/auth/callback',
@@ -1153,45 +714,20 @@ extension on _StatelessAuthViewState {
         serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
       );
 
-      // Wait for initialization to load existing tokens from storage
-      await Future.delayed(const Duration(milliseconds: 1000));
+      await client.refreshToken(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
 
-      // Perform refresh
-      debugPrint('🔄 Starting token refresh...');
-      await wrapper.refreshToken();
-      debugPrint('✅ Token refresh completed, waiting for save to complete...');
-
-      // Wait longer to ensure tokens are fully saved to secure storage
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      // Get new token info to verify they were saved
-      final newAccessToken = await CertiliaStatefulWrapper.getStoredAccessToken();
-      final newExpiry = await CertiliaStatefulWrapper.getStoredTokenExpiry();
-
-      debugPrint('📝 Verified New Access Token (first 20 chars): ${newAccessToken?.substring(0, 20 < newAccessToken.length ? 20 : newAccessToken.length)}...');
-      debugPrint('⏰ Verified New Token Expiry: $newExpiry');
-
-      // Don't dispose wrapper until after tokens are verified saved
-      wrapper.dispose();
-
-      // Get refresh token before setState
-      final newRefreshToken = await CertiliaStatefulWrapper.getStoredRefreshToken();
+      client.dispose();
 
       if (!context.mounted) return;
       Navigator.pop(context);
-
-      // Update state with new token info instead of refreshing the page
-      setState(() {
-        _currentAccessToken = newAccessToken;
-        _currentRefreshToken = newRefreshToken;
-        _tokenExpiry = newExpiry;
-      });
+      _showSuccessDialog(context, 'Token refreshed successfully');
     } catch (e) {
-      debugPrint('❌ Token refresh failed: $e');
       if (!context.mounted) return;
       Navigator.pop(context);
-      final errorMessage = isEnglish ? 'Refresh failed: $e' : 'Osvježavanje neuspješno: $e';
-      _showErrorDialog(context, errorMessage);
+      _showErrorDialog(context, 'Refresh failed: $e');
     }
   }
 
@@ -1204,7 +740,7 @@ extension on _StatelessAuthViewState {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
+        builder: (context) => HomePage(onThemeToggle: onThemeToggle),
       ),
     );
   }
@@ -1280,164 +816,101 @@ extension on _StatelessAuthViewState {
   }
 }
 
-/// Certilia official theme colors and styling
+// Include all CertiliaTheme and CertiliaTextStyles from main_stateful_backup.dart
 class CertiliaTheme {
-  // Primary Colors
-  static const Color primaryBlue = Color(0xFF2563EB);
-  static const Color primaryBlueDark = Color(0xFF1E40AF);
-  static const Color primaryBlueLight = Color(0xFF3B82F6);
-
-  // Light Theme Colors
-  static const Color lightBackground = Color(0xFFF8FAFC);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceGray = Color(0xFFF3F4F6);
-  static const Color lightTextPrimary = Color(0xFF1F2937);
-  static const Color lightTextSecondary = Color(0xFF6B7280);
-  static const Color lightTextTertiary = Color(0xFF9CA3AF);
-  static const Color lightBorder = Color(0xFFE5E7EB);
-  static const Color lightDivider = Color(0xFFF3F4F6);
-
-  // Dark Theme Colors
-  static const Color darkBackground = Color(0xFF0F172A);
-  static const Color darkSurface = Color(0xFF1E293B);
-  static const Color darkSurfaceGray = Color(0xFF334155);
-  static const Color darkTextPrimary = Color(0xFFF1F5F9);
-  static const Color darkTextSecondary = Color(0xFFCBD5E1);
-  static const Color darkTextTertiary = Color(0xFF94A3B8);
-  static const Color darkBorder = Color(0xFF334155);
-  static const Color darkDivider = Color(0xFF1E293B);
-
-  // Status Colors (same for both themes)
-  static const Color successGreen = Color(0xFF10B981);
-  static const Color warningOrange = Color(0xFFF59E0B);
-  static const Color errorRed = Color(0xFFEF4444);
+  // Colors
+  static const Color primaryBlue = Color(0xFF2196F3);
+  static const Color successGreen = Color(0xFF4CAF50);
+  static const Color errorRed = Color(0xFFF44336);
+  static const Color warningOrange = Color(0xFFFF9800);
 
   // Spacing
-  static const double spaceXS = 8.0;
-  static const double spaceSM = 12.0;
+  static const double spaceSM = 8.0;
   static const double spaceMD = 16.0;
   static const double spaceLG = 24.0;
   static const double spaceXL = 32.0;
 
-  // Border Radius
+  // Border radius
   static const double radiusSmall = 8.0;
   static const double radiusMedium = 12.0;
   static const double radiusLarge = 16.0;
 
-  // Shadows (context-aware)
-  static List<BoxShadow> cardShadow(bool isDark) => [
-    BoxShadow(
-      color: isDark
-        ? Colors.black.withValues(alpha: 0.3)
-        : Colors.black.withValues(alpha: 0.05),
-      blurRadius: 10,
-      offset: const Offset(0, 2),
-    ),
-  ];
-
-  // Helper methods for theme-aware colors
+  // Dynamic colors based on theme
   static Color backgroundColor(bool isDark) =>
-    isDark ? darkBackground : lightBackground;
+      isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5);
 
   static Color surfaceColor(bool isDark) =>
-    isDark ? darkSurface : lightSurface;
+      isDark ? const Color(0xFF1E1E1E) : Colors.white;
 
   static Color surfaceGrayColor(bool isDark) =>
-    isDark ? darkSurfaceGray : lightSurfaceGray;
-
-  static Color textPrimaryColor(bool isDark) =>
-    isDark ? darkTextPrimary : lightTextPrimary;
-
-  static Color textSecondaryColor(bool isDark) =>
-    isDark ? darkTextSecondary : lightTextSecondary;
-
-  static Color textTertiaryColor(bool isDark) =>
-    isDark ? darkTextTertiary : lightTextTertiary;
+      isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF8F8F8);
 
   static Color borderColor(bool isDark) =>
-    isDark ? darkBorder : lightBorder;
+      isDark ? const Color(0xFF2C2C2C) : const Color(0xFFE0E0E0);
 
   static Color dividerColor(bool isDark) =>
-    isDark ? darkDivider : lightDivider;
+      isDark ? const Color(0xFF2C2C2C) : const Color(0xFFE0E0E0);
+
+  static Color textPrimaryColor(bool isDark) =>
+      isDark ? Colors.white : const Color(0xFF1A1A1A);
+
+  static Color textSecondaryColor(bool isDark) =>
+      isDark ? Colors.white70 : const Color(0xFF757575);
+
+  static Color textTertiaryColor(bool isDark) =>
+      isDark ? Colors.white54 : const Color(0xFF9E9E9E);
 
   // Themes
   static final ThemeData lightTheme = ThemeData(
-    useMaterial3: true,
     brightness: Brightness.light,
     primaryColor: primaryBlue,
-    scaffoldBackgroundColor: lightBackground,
-    colorScheme: const ColorScheme.light(
-      primary: primaryBlue,
-      secondary: successGreen,
-      error: errorRed,
-      surface: lightSurface,
-    ),
+    scaffoldBackgroundColor: backgroundColor(false),
+    colorScheme: const ColorScheme.light(primary: primaryBlue),
   );
 
   static final ThemeData darkTheme = ThemeData(
-    useMaterial3: true,
     brightness: Brightness.dark,
     primaryColor: primaryBlue,
-    scaffoldBackgroundColor: darkBackground,
-    colorScheme: const ColorScheme.dark(
-      primary: primaryBlue,
-      secondary: successGreen,
-      error: errorRed,
-      surface: darkSurface,
-    ),
+    scaffoldBackgroundColor: backgroundColor(true),
+    colorScheme: const ColorScheme.dark(primary: primaryBlue),
   );
 }
 
-/// Certilia text styles (theme-aware)
 class CertiliaTextStyles {
-  // Headings
   static TextStyle heading(bool isDark) => TextStyle(
     fontSize: 24,
-    fontWeight: FontWeight.w600,
-    letterSpacing: -0.5,
+    fontWeight: FontWeight.bold,
     color: CertiliaTheme.textPrimaryColor(isDark),
   );
 
   static TextStyle subheading(bool isDark) => TextStyle(
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: FontWeight.w600,
-    letterSpacing: -0.5,
     color: CertiliaTheme.textPrimaryColor(isDark),
   );
 
-  // Body Text
   static TextStyle bodyLarge(bool isDark) => TextStyle(
     fontSize: 16,
-    fontWeight: FontWeight.w400,
     color: CertiliaTheme.textPrimaryColor(isDark),
   );
 
   static TextStyle bodyMedium(bool isDark) => TextStyle(
     fontSize: 14,
-    fontWeight: FontWeight.w400,
     color: CertiliaTheme.textPrimaryColor(isDark),
   );
 
   static TextStyle bodySmall(bool isDark) => TextStyle(
     fontSize: 12,
-    fontWeight: FontWeight.w400,
-    color: CertiliaTheme.textSecondaryColor(isDark),
-  );
-
-  // Labels
-  static TextStyle label(bool isDark) => TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w500,
-    color: CertiliaTheme.textSecondaryColor(isDark),
+    color: CertiliaTheme.textPrimaryColor(isDark),
   );
 
   static TextStyle labelSmall(bool isDark) => TextStyle(
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: FontWeight.w500,
     color: CertiliaTheme.textSecondaryColor(isDark),
+    letterSpacing: 0.5,
   );
 
-  // Buttons
   static const TextStyle button = TextStyle(
     fontSize: 14,
     fontWeight: FontWeight.w600,

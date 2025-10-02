@@ -20,11 +20,24 @@ class CertiliaExtendedInfo {
 
   /// Creates a [CertiliaExtendedInfo] from a JSON object
   factory CertiliaExtendedInfo.fromJson(Map<String, dynamic> json) {
+    // Server returns snake_case keys: user_info, available_fields, token_expiry
+    // Support both snake_case (from server) and camelCase (legacy) formats
+    final userInfoData = json['user_info'] ?? json['userInfo'];
+    final availableFieldsData = json['available_fields'] ?? json['availableFields'];
+    final tokenExpiryData = json['token_expiry'] ?? json['tokenExpiry'];
+
+    // Ensure userInfo is a Map, not null
+    final userInfoMap = userInfoData is Map<String, dynamic>
+        ? userInfoData
+        : <String, dynamic>{};
+
     return CertiliaExtendedInfo(
-      userInfo: json['userInfo'] as Map<String, dynamic>,
-      availableFields: List<String>.from(json['availableFields'] ?? []),
-      tokenExpiry: json['tokenExpiry'] != null 
-          ? DateTime.parse(json['tokenExpiry']) 
+      userInfo: userInfoMap,
+      availableFields: availableFieldsData != null
+          ? List<String>.from(availableFieldsData)
+          : [],
+      tokenExpiry: tokenExpiryData != null
+          ? DateTime.parse(tokenExpiryData)
           : null,
     );
   }

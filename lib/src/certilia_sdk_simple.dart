@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'certilia_universal_client.dart';
-import 'certilia_webview_client.dart';
+import 'certilia_stateful_wrapper.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_config_simple.dart';
 
@@ -76,8 +75,8 @@ class CertiliaSDKSimple {
         serverUrl: simpleConfig.serverUrl,
       );
     } else {
-      // On mobile/desktop, use WebView client for server-based flow
-      return CertiliaWebViewClient(
+      // On mobile/desktop, use stateful wrapper around WebView client for server-based flow
+      return CertiliaStatefulWrapper(
         config: fullConfig,
         serverUrl: simpleConfig.serverUrl,
       );

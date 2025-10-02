@@ -37,30 +37,47 @@ class CertiliaUser {
 
   /// Creates a [CertiliaUser] from a JSON map
   factory CertiliaUser.fromJson(Map<String, dynamic> json) {
+    // Support both snake_case (from server) and camelCase formats
     return CertiliaUser(
       sub: json['sub'] as String,
-      firstName: json['given_name'] as String? ?? json['firstName'] as String?,
-      lastName: json['family_name'] as String? ?? json['lastName'] as String?,
-      oib: json['oib'] as String?,
-      dateOfBirth: _parseDate(json['birthdate'] as String?),
+      firstName: json['given_name'] as String? ??
+                json['first_name'] as String? ??
+                json['givenName'] as String? ??
+                json['firstName'] as String?,
+      lastName: json['family_name'] as String? ??
+               json['last_name'] as String? ??
+               json['familyName'] as String? ??
+               json['lastName'] as String?,
+      oib: json['oib'] as String? ?? json['pin'] as String?,
+      dateOfBirth: _parseDate(
+        json['birthdate'] as String? ??
+        json['date_of_birth'] as String? ??
+        json['dateOfBirth'] as String?
+      ),
       email: json['email'] as String?,
       raw: Map<String, dynamic>.from(json),
     );
   }
 
-  /// Parses a date string in YYYY-MM-DD format
+  /// Parses a date string in various formats
   static DateTime? _parseDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return null;
     try {
-      final parts = dateStr.split('-');
-      if (parts.length == 3) {
-        return DateTime(
-          int.parse(parts[0]),
-          int.parse(parts[1]),
-          int.parse(parts[2]),
-        );
-      }
-    } catch (_) {}
+      // Try to parse ISO 8601 format first (e.g., 1990-12-19T00:00:00Z)
+      return DateTime.parse(dateStr);
+    } catch (_) {
+      // Fallback to simple YYYY-MM-DD format
+      try {
+        final parts = dateStr.split('-');
+        if (parts.length == 3) {
+          return DateTime(
+            int.parse(parts[0]),
+            int.parse(parts[1]),
+            int.parse(parts[2]),
+          );
+        }
+      } catch (_) {}
+    }
     return null;
   }
 
