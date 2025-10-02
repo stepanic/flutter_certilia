@@ -158,8 +158,23 @@ if echo "$EXCHANGE_RESPONSE" | grep -q "error"; then
 fi
 
 echo -e "${GREEN}✅ Tokens received successfully!${NC}"
-# Uncomment to see full token response:
-# echo "$EXCHANGE_RESPONSE" | jq '.' 2>/dev/null || echo "$EXCHANGE_RESPONSE"
+
+# Show user data from exchange response with thumbnail truncated
+echo -e "${BLUE}User data from token exchange:${NC}"
+USER_FROM_EXCHANGE=$(echo "$EXCHANGE_RESPONSE" | jq '.user' 2>/dev/null)
+if [ ! -z "$USER_FROM_EXCHANGE" ] && [ "$USER_FROM_EXCHANGE" != "null" ]; then
+    if echo "$USER_FROM_EXCHANGE" | jq -e '.thumbnail' > /dev/null 2>&1; then
+        echo "$USER_FROM_EXCHANGE" | jq '.thumbnail = if .thumbnail then (.thumbnail[0:50] + "...[truncated]") else null end' 2>/dev/null
+        HAS_THUMBNAIL=$(echo "$USER_FROM_EXCHANGE" | jq -r '.thumbnail' | wc -c)
+        echo -e "${YELLOW}📸 Thumbnail found in exchange response (size: ~${HAS_THUMBNAIL} bytes)${NC}"
+    else
+        echo "$USER_FROM_EXCHANGE" | jq '.' 2>/dev/null
+        echo -e "${YELLOW}📸 No thumbnail in exchange response${NC}"
+    fi
+else
+    echo -e "${RED}No user data in exchange response${NC}"
+fi
+echo ""
 
 # Extract access token
 ACCESS_TOKEN=$(echo "$EXCHANGE_RESPONSE" | jq -r '.accessToken' 2>/dev/null)
@@ -199,23 +214,8 @@ else
     echo -e "${GREEN}✅ Header size is acceptable${NC}"
 fi
 
-# Test basic user endpoint
-echo -e "\n${YELLOW}6. Testing basic user endpoint...${NC}"
-USER_RESPONSE=$(curl -s "$API_URL/auth/user" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "ngrok-skip-browser-warning: true")
-
-echo -e "${GREEN}✅ Basic user info retrieved:${NC}"
-echo -e "${BLUE}Full basic user response:${NC}"
-# Show full response but truncate thumbnail if present
-if echo "$USER_RESPONSE" | jq -e '.user.thumbnail' > /dev/null 2>&1; then
-    echo "$USER_RESPONSE" | jq '.user.thumbnail = if .user.thumbnail then (.user.thumbnail[0:50] + "...[truncated]") else null end' 2>/dev/null || echo "$USER_RESPONSE"
-else
-    echo "$USER_RESPONSE" | jq '.' 2>/dev/null || echo "$USER_RESPONSE"
-fi
-
 # Test extended user info endpoint
-echo -e "\n${YELLOW}7. Testing extended user info endpoint...${NC}"
+echo -e "\n${YELLOW}6. Testing extended user info endpoint...${NC}"
 
 # Show header size again before the problematic request
 echo -e "${BLUE}📏 Sending request with Authorization header of ${HEADER_SIZE} bytes${NC}"
@@ -282,8 +282,7 @@ echo ""
 echo -e "${BLUE}Summary:${NC}"
 echo "✅ Health check"
 echo "✅ OAuth initialization"
-echo "✅ Code exchange"
-echo "✅ Basic user info"
+echo "✅ Code exchange with user data"
 if [ "$HTTP_CODE" = "200" ]; then
     echo "✅ Extended user info"
 else

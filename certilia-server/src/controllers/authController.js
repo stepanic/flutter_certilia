@@ -2,6 +2,7 @@ import certiliaService from '../services/certiliaService.js';
 import tokenService from '../services/tokenService.js';
 import sessionService from '../services/sessionService.js';
 import pollingSessionService from '../services/pollingSessionService.js';
+import { convertKeysToSnakeCase } from '../utils/caseConverter.js';
 import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, generateState, generateNonce } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
 import { AuthenticationError, ValidationError } from '../utils/errors.js';
@@ -297,7 +298,8 @@ export const exchangeCode = async (req, res, next) => {
           iss: decoded.iss,
           aud: decoded.aud,
           hasThumbnail: !!thumbnail,
-          thumbnailSize: thumbnail ? thumbnail.length : 0
+          thumbnailSize: thumbnail ? thumbnail.length : 0,
+          allFields: Object.keys(decoded)
         });
 
         // Debug: Log all available fields in ID token (excluding thumbnail)
@@ -382,11 +384,18 @@ export const exchangeCode = async (req, res, next) => {
       token_type: certiliaTokens.token_type
     };
 
-    const completeUserInfo = {
+    // Merge user info and id token claims
+    const mergedUserInfo = {
       ...userInfo,
       ...idTokenClaims,
-      // Do NOT include thumbnail in JWT to avoid size issues
-      // thumbnail will only be in the response, not in the JWT token
+    };
+
+    // Convert all user data to snake_case for consistency
+    const snakeCaseUserInfo = convertKeysToSnakeCase(mergedUserInfo);
+
+    // Add certilia tokens (already in snake_case)
+    const completeUserInfo = {
+      ...snakeCaseUserInfo,
       certilia_tokens: certiliaTokensForJWT, // Store tokens without ID token
     };
 
@@ -406,18 +415,22 @@ export const exchangeCode = async (req, res, next) => {
     // Clean up session
     sessionService.deleteSession(session_id);
 
-    logger.info('Code exchanged successfully', { userId: userInfo.sub });
+    logger.info('Code exchanged successfully', {
+      userId: userInfo.sub,
+      hasThumbnailInResponse: thumbnail !== null && thumbnail !== undefined,
+      thumbnailLength: thumbnail ? thumbnail.length : 0
+    });
 
     res.json({
       ...tokens,
       user: {
         sub: userInfo.sub,
-        firstName: userInfo.firstName || userInfo.given_name,
-        lastName: userInfo.lastName || userInfo.family_name,
+        first_name: userInfo.firstName || userInfo.given_name,
+        last_name: userInfo.lastName || userInfo.family_name,
         oib: userInfo.oib,
         email: userInfo.email,
-        dateOfBirth: userInfo.dateOfBirth || userInfo.birthdate,
-        thumbnail: thumbnail, // Include thumbnail in response but not in JWT
+        date_of_birth: userInfo.dateOfBirth || userInfo.birthdate,
+        thumbnail: thumbnail ?? null, // Include thumbnail in response but not in JWT
       },
     });
   } catch (error) {
@@ -482,8 +495,9 @@ export const refreshToken = async (req, res, next) => {
 export const getCurrentUser = async (req, res, next) => {
   try {
     // User info is attached by auth middleware
+    // Already in snake_case from JWT, but ensure consistency
     res.json({
-      user: req.user,
+      user: convertKeysToSnakeCase(req.user),
     });
   } catch (error) {
     next(error);

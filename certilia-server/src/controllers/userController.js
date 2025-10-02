@@ -1,28 +1,6 @@
 import certiliaService from '../services/certiliaService.js';
 import logger from '../utils/logger.js';
-
-/**
- * Convert camelCase to snake_case
- */
-const toSnakeCase = (str) => {
-  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-};
-
-/**
- * Convert object keys to snake_case recursively
- */
-const convertKeysToSnakeCase = (obj) => {
-  if (Array.isArray(obj)) {
-    return obj.map(item => convertKeysToSnakeCase(item));
-  } else if (obj !== null && typeof obj === 'object') {
-    return Object.keys(obj).reduce((acc, key) => {
-      const snakeKey = toSnakeCase(key);
-      acc[snakeKey] = convertKeysToSnakeCase(obj[key]);
-      return acc;
-    }, {});
-  }
-  return obj;
-};
+import { convertKeysToSnakeCase } from '../utils/caseConverter.js';
 
 /**
  * Get extended user information from Certilia API
