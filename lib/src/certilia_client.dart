@@ -12,6 +12,11 @@ import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
 
 /// Main client for Certilia OAuth authentication
+@Deprecated(
+  'Use CertiliaSDKSimple for new implementations. '
+  'CertiliaClient will be removed in version 1.0.0. '
+  'CertiliaSDKSimple provides a cleaner API with better platform support.',
+)
 class CertiliaClient {
   /// Configuration for the client
   final CertiliaConfig config;
