@@ -38,7 +38,21 @@ echo ""
 
 # Check if server is running
 echo -e "${YELLOW}2️⃣  Checking if server is running...${NC}"
-HEALTH=$(curl -s "$API_URL/health" 2>/dev/null)
+HEALTH=$(curl -s "$API_URL/health" -H "ngrok-skip-browser-warning: true" 2>/dev/null)
+
+# Check if response is valid JSON
+if ! echo "$HEALTH" | jq empty 2>/dev/null; then
+    echo -e "${RED}❌ Server is not responding correctly!${NC}"
+    echo ""
+    echo "Received non-JSON response (possibly ngrok error page):"
+    echo "$(echo "$HEALTH" | head -3)"
+    echo ""
+    echo "Please ensure:"
+    echo "  1. Server is running: npm run dev:test (or dev:prod)"
+    echo "  2. ngrok is running: ngrok http --url=uniformly-credible-opossum.ngrok-free.app 3000"
+    exit 1
+fi
+
 if [ -z "$HEALTH" ]; then
     echo -e "${RED}❌ Server is not responding!${NC}"
     echo ""
@@ -81,7 +95,14 @@ test_environment() {
 
     # Initialize OAuth flow
     echo -e "${YELLOW}3️⃣  Initializing OAuth flow...${NC}"
-    INIT_RESPONSE=$(curl -s "$API_URL/auth/initialize?response_type=code&redirect_uri=$BASE_URL/api/auth/callback")
+    INIT_RESPONSE=$(curl -s "$API_URL/auth/initialize?response_type=code&redirect_uri=$BASE_URL/api/auth/callback" -H "ngrok-skip-browser-warning: true")
+
+    # Check if response is valid JSON
+    if ! echo "$INIT_RESPONSE" | jq empty 2>/dev/null; then
+        echo -e "${RED}❌ Failed to initialize OAuth flow - invalid response${NC}"
+        echo "   Received non-JSON response"
+        return 1
+    fi
 
     if [ -z "$INIT_RESPONSE" ]; then
         echo -e "${RED}❌ Failed to initialize OAuth flow${NC}"
@@ -91,6 +112,12 @@ test_environment() {
     AUTH_URL=$(echo "$INIT_RESPONSE" | jq -r '.authorization_url')
     SESSION_ID=$(echo "$INIT_RESPONSE" | jq -r '.session_id')
     STATE=$(echo "$INIT_RESPONSE" | jq -r '.state')
+
+    # Validate extracted values
+    if [ "$AUTH_URL" = "null" ] || [ -z "$AUTH_URL" ]; then
+        echo -e "${RED}❌ Failed to extract authorization URL from response${NC}"
+        return 1
+    fi
 
     echo -e "   ${GREEN}✅ OAuth initialized${NC}"
     echo -e "   Session ID: ${BLUE}${SESSION_ID:0:20}...${NC}"
@@ -125,8 +152,29 @@ test_environment() {
 
     # Parse callback URL
     echo -e "\n${YELLOW}5️⃣  Processing callback...${NC}"
-    CODE=$(echo "$CALLBACK_URL" | grep -oP '(?<=code=)[^&]*')
-    CALLBACK_STATE=$(echo "$CALLBACK_URL" | grep -oP '(?<=state=)[^&]*')
+
+    # Parse URL parameters (macOS compatible)
+    QUERY_STRING=$(echo "$CALLBACK_URL" | cut -d'?' -f2)
+
+    # Parse individual parameters
+    CODE=""
+    CALLBACK_STATE=""
+
+    # Parse each parameter
+    IFS='&' read -ra PARAMS <<< "$QUERY_STRING"
+    for param in "${PARAMS[@]}"; do
+        KEY=$(echo "$param" | cut -d'=' -f1)
+        VALUE=$(echo "$param" | cut -d'=' -f2)
+
+        case "$KEY" in
+            "code")
+                CODE="$VALUE"
+                ;;
+            "state")
+                CALLBACK_STATE="$VALUE"
+                ;;
+        esac
+    done
 
     if [ -z "$CODE" ]; then
         echo -e "${RED}❌ Could not extract code from callback URL${NC}"
@@ -140,11 +188,18 @@ test_environment() {
     echo -e "${YELLOW}6️⃣  Exchanging code for tokens...${NC}"
     EXCHANGE_RESPONSE=$(curl -s -X POST "$API_URL/auth/exchange" \
       -H "Content-Type: application/json" \
+      -H "ngrok-skip-browser-warning: true" \
       -d "{
         \"code\": \"$CODE\",
         \"state\": \"$CALLBACK_STATE\",
         \"session_id\": \"$SESSION_ID\"
       }")
+
+    # Check if response is valid JSON
+    if ! echo "$EXCHANGE_RESPONSE" | jq empty 2>/dev/null; then
+        echo -e "${RED}❌ Token exchange failed - invalid response${NC}"
+        return 1
+    fi
 
     if echo "$EXCHANGE_RESPONSE" | grep -q "error"; then
         echo -e "${RED}❌ Token exchange failed${NC}"
@@ -164,15 +219,22 @@ test_environment() {
     # Test extended info endpoint
     echo -e "${YELLOW}8️⃣  Testing extended info endpoint...${NC}"
     EXTENDED_RESPONSE=$(curl -s "$API_URL/user/extended-info" \
-      -H "Authorization: Bearer $ACCESS_TOKEN")
+      -H "Authorization: Bearer $ACCESS_TOKEN" \
+      -H "ngrok-skip-browser-warning: true")
+
+    # Check if response is valid JSON
+    if ! echo "$EXTENDED_RESPONSE" | jq empty 2>/dev/null; then
+        echo -e "   ${RED}❌ Extended info request failed - invalid response${NC}"
+        return 1
+    fi
 
     if [ $? -eq 0 ]; then
         echo -e "   ${GREEN}✅ Extended info retrieved${NC}"
         echo ""
         echo -e "${YELLOW}9️⃣  Extended Info ($ENV_NAME):${NC}"
 
-        # Show available fields
-        AVAILABLE_FIELDS=$(echo "$EXTENDED_RESPONSE" | jq -r '.availableFields[]' 2>/dev/null)
+        # Show available fields (updated to use snake_case)
+        AVAILABLE_FIELDS=$(echo "$EXTENDED_RESPONSE" | jq -r '.available_fields[]' 2>/dev/null)
         if [ ! -z "$AVAILABLE_FIELDS" ]; then
             echo -e "   ${BLUE}Available fields:${NC}"
             echo "$AVAILABLE_FIELDS" | sed 's/^/     - /'
@@ -251,8 +313,8 @@ case $choice in
 
             if [ ! -z "$TEST_EXTENDED_RESPONSE" ] && [ ! -z "$PROD_EXTENDED_RESPONSE" ]; then
                 echo -e "${BLUE}Extended info comparison:${NC}"
-                TEST_FIELD_COUNT=$(echo "$TEST_EXTENDED_RESPONSE" | jq -r '.availableFields | length' 2>/dev/null || echo "0")
-                PROD_FIELD_COUNT=$(echo "$PROD_EXTENDED_RESPONSE" | jq -r '.availableFields | length' 2>/dev/null || echo "0")
+                TEST_FIELD_COUNT=$(echo "$TEST_EXTENDED_RESPONSE" | jq -r '.available_fields | length' 2>/dev/null || echo "0")
+                PROD_FIELD_COUNT=$(echo "$PROD_EXTENDED_RESPONSE" | jq -r '.available_fields | length' 2>/dev/null || echo "0")
                 echo -e "  TEST available fields: $TEST_FIELD_COUNT"
                 echo -e "  PROD available fields: $PROD_FIELD_COUNT"
 

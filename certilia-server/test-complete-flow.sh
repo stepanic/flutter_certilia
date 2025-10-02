@@ -21,6 +21,17 @@ API_URL="$BASE_URL/api"
 echo -e "\n${YELLOW}1. Checking server health...${NC}"
 HEALTH_RESPONSE=$(curl -s "$API_URL/health" -H "ngrok-skip-browser-warning: true")
 
+# Check if response is valid JSON
+if ! echo "$HEALTH_RESPONSE" | jq empty 2>/dev/null; then
+    echo -e "${RED}❌ Server is not responding correctly. Make sure:${NC}"
+    echo "   1. Server is running (npm run dev:test or npm run dev:prod)"
+    echo "   2. ngrok is running with correct domain"
+    echo ""
+    echo "   Received non-JSON response (possibly ngrok error page):"
+    echo "   $(echo "$HEALTH_RESPONSE" | head -3)"
+    exit 1
+fi
+
 if [ -z "$HEALTH_RESPONSE" ]; then
     echo -e "${RED}❌ Server is not responding. Make sure:${NC}"
     echo "   1. Server is running (npm run dev:test or npm run dev:prod)"
@@ -35,6 +46,14 @@ echo "$HEALTH_RESPONSE" | jq '.'
 echo -e "\n${YELLOW}2. Initializing OAuth flow...${NC}"
 INIT_RESPONSE=$(curl -s "$API_URL/auth/initialize?response_type=code&redirect_uri=$BASE_URL/api/auth/callback" -H "ngrok-skip-browser-warning: true")
 
+# Check if response is valid JSON
+if ! echo "$INIT_RESPONSE" | jq empty 2>/dev/null; then
+    echo -e "${RED}❌ Failed to initialize OAuth flow - invalid response${NC}"
+    echo "   Received non-JSON response (server might not be running):"
+    echo "   $(echo "$INIT_RESPONSE" | head -3)"
+    exit 1
+fi
+
 if [ -z "$INIT_RESPONSE" ]; then
     echo -e "${RED}❌ Failed to initialize OAuth flow${NC}"
     exit 1
@@ -47,6 +66,13 @@ echo "$INIT_RESPONSE" | jq '.'
 AUTH_URL=$(echo "$INIT_RESPONSE" | jq -r '.authorization_url')
 SESSION_ID=$(echo "$INIT_RESPONSE" | jq -r '.session_id')
 STATE=$(echo "$INIT_RESPONSE" | jq -r '.state')
+
+# Validate extracted values
+if [ "$AUTH_URL" = "null" ] || [ -z "$AUTH_URL" ]; then
+    echo -e "${RED}❌ Failed to extract authorization URL from response${NC}"
+    echo "   Response might be missing expected fields"
+    exit 1
+fi
 
 echo -e "\n${YELLOW}3. OAuth Flow Details:${NC}"
 echo "Session ID: $SESSION_ID"
