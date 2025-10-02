@@ -104,12 +104,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/user', userRoutes);
 
-// Debug routes (only in dev/test or when explicitly enabled)
-if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
-  const debugRoutes = await import('./routes/debug.js');
-  app.use('/api/debug', debugRoutes.default);
-}
-
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -122,8 +116,10 @@ app.get('/', (req, res) => {
         callback: 'GET /api/auth/callback',
         exchange: 'POST /api/auth/exchange',
         refresh: 'POST /api/auth/refresh',
-        user: 'GET /api/auth/user',
-        logout: 'POST /api/auth/logout',
+        polling: {
+          start: 'POST /api/auth/polling/start',
+          status: 'GET /api/auth/polling/:polling_id/status'
+        }
       },
       user: {
         extendedInfo: 'GET /api/user/extended-info',

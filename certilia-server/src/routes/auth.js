@@ -53,21 +53,6 @@ router.post(
   authController.refreshToken
 );
 
-/**
- * @route GET /auth/user
- * @desc Get current user info
- * @header {string} Authorization - Bearer token
- * @returns {Object} User information
- */
-router.get('/user', authenticate, authController.getCurrentUser);
-
-/**
- * @route POST /auth/logout
- * @desc Logout user
- * @header {string} Authorization - Bearer token
- * @returns {Object} Success message
- */
-router.post('/logout', authenticate, authController.logout);
 
 /**
  * @route POST /auth/polling/start
