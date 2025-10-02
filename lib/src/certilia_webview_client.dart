@@ -568,13 +568,23 @@ class _CertiliaWebViewScreenState extends State<_CertiliaWebViewScreen> {
       
       if (error != null) {
         // Authentication failed
-        Navigator.of(context).pop(null);
+        // Add a small delay to ensure the WebView has time to complete its operations
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop(null);
+          }
+        });
         return true;
       }
-      
+
       if (code != null && state == widget.expectedState) {
         // Success - return the code
-        Navigator.of(context).pop(code);
+        // Add a small delay to ensure the WebView has time to complete its operations
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop(code);
+          }
+        });
         return true;
       }
     }

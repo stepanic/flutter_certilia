@@ -50,8 +50,10 @@ class CertiliaStatefulWrapper {
 
   /// Authenticate using WebView and manage state
   Future<CertiliaUser> authenticate(BuildContext context) async {
+    print('🔐 [CertiliaStatefulWrapper] Starting authentication...');
     // Call stateless authenticate
     final authData = await _client.authenticate(context);
+    print('📦 [CertiliaStatefulWrapper] Auth data received from WebView');
 
     // Create token object
     _currentToken = CertiliaToken(
