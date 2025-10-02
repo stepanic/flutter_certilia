@@ -963,28 +963,25 @@ extension on _StatelessAuthViewState {
 
       if (!context.mounted) return;
 
-      // Small delay to ensure any dialogs from authentication are closed
-      await Future.delayed(const Duration(milliseconds: 200));
+      debugPrint('✅ Authentication completed successfully, preparing navigation...');
+
+      // Give time for the WebView completion dialog to fully close
+      await Future.delayed(const Duration(milliseconds: 300));
 
       if (!context.mounted) return;
 
-      // Ensure we can navigate (all dialogs are closed)
-      while (context.mounted && Navigator.canPop(context)) {
-        debugPrint('📝 Closing lingering dialog/route before navigation');
-        Navigator.pop(context);
-        await Future.delayed(const Duration(milliseconds: 50));
-        if (!context.mounted) break;
-      }
-
-      if (!context.mounted) return;
-
-      // Refresh the page to show authenticated state
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
-        ),
-      );
+      // Use post frame callback to ensure we're not in the middle of a build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          debugPrint('🔄 Navigating to authenticated home page...');
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
+            ),
+            (route) => false,
+          );
+        }
+      });
     } on CertiliaAuthenticationException catch (e) {
       // User cancelled or authentication failed
       if (!context.mounted) return;

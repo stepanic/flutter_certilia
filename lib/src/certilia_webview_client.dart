@@ -65,15 +65,15 @@ class CertiliaWebViewClient {
       // Show loading dialog while exchanging tokens
       if (context.mounted) {
         // Add a small delay to ensure WebView is fully closed
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 150));
 
         if (context.mounted) {
           showDialog(
             context: context,
             barrierDismissible: false,
             builder: (BuildContext dialogContext) {
-              return WillPopScope(
-                onWillPop: () async => false,
+              return PopScope(
+                canPop: false,
                 child: Center(
                   child: Card(
                     child: Padding(
@@ -100,21 +100,18 @@ class CertiliaWebViewClient {
       }
 
       // Exchange code for tokens
-      Map<String, dynamic> tokenData;
-      try {
-        tokenData = await _exchangeCodeForTokens(
-          code: code,
-          state: authData['state'],
-          sessionId: authData['session_id'],
-        );
-      } finally {
-        // Close loading dialog if still showing
-        if (dialogShown && context.mounted) {
-          _log('🔄 Closing completion dialog');
-          Navigator.pop(context);
-          // Add small delay to ensure dialog is fully closed
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
+      final tokenData = await _exchangeCodeForTokens(
+        code: code,
+        state: authData['state'],
+        sessionId: authData['session_id'],
+      );
+
+      // Close loading dialog if still showing
+      if (dialogShown && context.mounted) {
+        _log('🔄 Closing completion dialog');
+        Navigator.of(context).pop();
+        // Add delay to ensure dialog is fully closed
+        await Future.delayed(const Duration(milliseconds: 150));
       }
 
       // Return all auth data for caller to handle
@@ -134,8 +131,8 @@ class CertiliaWebViewClient {
       // Make sure to close any loading dialog
       if (dialogShown && context.mounted) {
         _log('🔄 Closing completion dialog after error');
-        Navigator.pop(context);
-        await Future.delayed(const Duration(milliseconds: 50));
+        Navigator.of(context).pop();
+        await Future.delayed(const Duration(milliseconds: 100));
       }
 
       if (e is CertiliaException) {
