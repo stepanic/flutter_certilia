@@ -926,17 +926,22 @@ extension on _StatelessAuthViewState {
   // Action methods
   Future<void> _authenticate(BuildContext context) async {
     try {
-      // Show loading dialog
+      debugPrint('🚀 Starting authentication process...');
+
+      // Show loading dialog for initialization
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 20),
-              Text('Initializing...'),
-            ],
+        builder: (context) => PopScope(
+          canPop: false,
+          child: const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Initializing...'),
+              ],
+            ),
           ),
         ),
       );
@@ -950,44 +955,38 @@ extension on _StatelessAuthViewState {
 
       if (!context.mounted) return;
 
-      // Close loading dialog before showing WebView
+      // Close initialization dialog
       Navigator.pop(context);
 
-      // Small delay to ensure dialog is closed
+      // Small delay to ensure dialog is closed before showing WebView
       await Future.delayed(const Duration(milliseconds: 100));
 
       if (!context.mounted) return;
 
-      // Now show the WebView for authentication
+      debugPrint('📱 Showing WebView for authentication...');
+
+      // Show the WebView for authentication (this will handle its own UI)
       await certilia.authenticate(context);
 
       if (!context.mounted) return;
 
-      debugPrint('✅ Authentication completed successfully, preparing navigation...');
+      debugPrint('✅ Authentication successful! Navigating to home...');
 
-      // Give time for the WebView completion dialog to fully close
-      await Future.delayed(const Duration(milliseconds: 300));
+      // Simple and direct navigation - no delays or callbacks needed
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
+        ),
+        (route) => false,
+      );
 
-      if (!context.mounted) return;
-
-      // Use post frame callback to ensure we're not in the middle of a build
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          debugPrint('🔄 Navigating to authenticated home page...');
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
-            ),
-            (route) => false,
-          );
-        }
-      });
     } on CertiliaAuthenticationException catch (e) {
-      // User cancelled or authentication failed
+      debugPrint('❌ Authentication failed: ${e.message}');
+
       if (!context.mounted) return;
 
-      // Check if dialog is still open and close it
-      if (Navigator.canPop(context)) {
+      // Close any open dialog
+      while (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
 
@@ -997,10 +996,12 @@ extension on _StatelessAuthViewState {
         _showErrorDialog(context, 'Authentication failed: ${e.message}');
       }
     } catch (e) {
+      debugPrint('❌ Unexpected error: $e');
+
       if (!context.mounted) return;
 
-      // Check if dialog is still open and close it
-      if (Navigator.canPop(context)) {
+      // Close any open dialog
+      while (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
 
@@ -1011,6 +1012,8 @@ extension on _StatelessAuthViewState {
 
 
   Future<void> _logout(BuildContext context) async {
+    debugPrint('🚪 Logging out...');
+
     // Clear all stored authentication data
     await CertiliaStatefulWrapper.clearStoredData();
 
@@ -1023,13 +1026,15 @@ extension on _StatelessAuthViewState {
       _isLoadingExtendedInfo = false;
     });
 
-    // Refresh the page to show unauthenticated state
-    Navigator.pushReplacement(
-      context,
+    // Navigate to fresh home page - use pushAndRemoveUntil to clear any stack issues
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (context) => HomePage(onThemeToggle: widget.onThemeToggle),
       ),
+      (route) => false,
     );
+
+    debugPrint('✅ Logout complete');
   }
 
   void _showErrorDialog(BuildContext context, String message) {

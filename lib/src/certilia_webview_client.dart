@@ -36,8 +36,6 @@ class CertiliaWebViewClient {
   /// Authenticates the user using WebView and returns auth data
   /// This is a STATELESS operation - the caller must handle token storage
   Future<Map<String, dynamic>> authenticate(BuildContext context) async {
-    bool dialogShown = false;
-
     try {
       _log('Starting WebView authentication flow');
 
@@ -62,57 +60,12 @@ class CertiliaWebViewClient {
         );
       }
 
-      // Show loading dialog while exchanging tokens
-      if (context.mounted) {
-        // Add a small delay to ensure WebView is fully closed
-        await Future.delayed(const Duration(milliseconds: 150));
-
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext dialogContext) {
-              return PopScope(
-                canPop: false,
-                child: Center(
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CircularProgressIndicator(),
-                          const SizedBox(height: 16),
-                          Text(Localizations.localeOf(dialogContext).languageCode == 'hr'
-                              ? 'Dovršavanje prijave...'
-                              : 'Completing authentication...'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-          dialogShown = true;
-          _log('📋 Showing completion dialog');
-        }
-      }
-
-      // Exchange code for tokens
+      // Exchange code for tokens (no dialog here - let caller handle UI)
       final tokenData = await _exchangeCodeForTokens(
         code: code,
         state: authData['state'],
         sessionId: authData['session_id'],
       );
-
-      // Close loading dialog if still showing
-      if (dialogShown && context.mounted) {
-        _log('🔄 Closing completion dialog');
-        Navigator.of(context).pop();
-        // Add delay to ensure dialog is fully closed
-        await Future.delayed(const Duration(milliseconds: 150));
-      }
 
       // Return all auth data for caller to handle
       // Caller is responsible for storing tokens if needed
@@ -127,13 +80,6 @@ class CertiliaWebViewClient {
       };
     } catch (e) {
       _log('Authentication failed: $e');
-
-      // Make sure to close any loading dialog
-      if (dialogShown && context.mounted) {
-        _log('🔄 Closing completion dialog after error');
-        Navigator.of(context).pop();
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
 
       if (e is CertiliaException) {
         rethrow;
