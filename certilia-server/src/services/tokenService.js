@@ -52,20 +52,25 @@ class TokenService {
    * @returns {Object} Tokens object
    */
   generateTokenPair(user) {
+    // Extract certilia_tokens and JWT-specific fields that shouldn't be in the new token
+    const {
+      certilia_tokens,
+      exp,      // Remove expiry - will be set by jwt.sign()
+      iat,      // Remove issued at - will be set by jwt.sign()
+      nbf,      // Remove not before
+      jti,      // Remove JWT ID
+      ...userData
+    } = user;
+
+    // Create payload with all user data except certilia_tokens and JWT fields
     const payload = {
       sub: user.sub,
-      user: {
-        sub: user.sub,
-        firstName: user.firstName || user.given_name,
-        lastName: user.lastName || user.family_name,
-        oib: user.oib,
-        email: user.email,
-      },
+      ...userData,  // Include ALL user data fields except JWT technical fields
     };
 
-    // Include certilia_tokens if present
-    if (user.certilia_tokens) {
-      payload.certilia_tokens = user.certilia_tokens;
+    // Include certilia_tokens separately if present
+    if (certilia_tokens) {
+      payload.certilia_tokens = certilia_tokens;
     }
 
     const accessToken = this.generateAccessToken(payload);

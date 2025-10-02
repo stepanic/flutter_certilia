@@ -281,7 +281,11 @@ export const exchangeCode = async (req, res, next) => {
           throw new AuthenticationError('Invalid nonce in ID token');
         }
         
-        idTokenClaims = decoded;
+        // Remove thumbnail from decoded token to reduce JWT size
+        const { thumbnail, ...decodedWithoutThumbnail } = decoded;
+
+        idTokenClaims = decodedWithoutThumbnail;
+
         logger.info('ID token decoded successfully', {
           sub: decoded.sub,
           name: decoded.name,
@@ -289,7 +293,15 @@ export const exchangeCode = async (req, res, next) => {
           family_name: decoded.family_name,
           email: decoded.email,
           iss: decoded.iss,
-          aud: decoded.aud
+          aud: decoded.aud,
+          hasThumbnail: !!thumbnail,
+          thumbnailSize: thumbnail ? thumbnail.length : 0
+        });
+
+        // Debug: Log all available fields in ID token (excluding thumbnail)
+        logger.debug('All ID token claims:', {
+          availableFields: Object.keys(decoded),
+          allClaimsExceptThumbnail: decodedWithoutThumbnail
         });
       } catch (error) {
         logger.error('Failed to decode ID token:', error);
@@ -316,7 +328,7 @@ export const exchangeCode = async (req, res, next) => {
           oib: idTokenClaims.pin || idTokenClaims.oib,
           birthdate: idTokenClaims.birthdate,
           dateOfBirth: idTokenClaims.birthdate,  // Keep both for compatibility
-          // Include all other claims
+          // Include all other claims (thumbnail already removed)
           ...idTokenClaims
         };
       } else {
@@ -346,7 +358,7 @@ export const exchangeCode = async (req, res, next) => {
             oib: idTokenClaims.pin || idTokenClaims.oib,
             birthdate: idTokenClaims.birthdate,
             dateOfBirth: idTokenClaims.birthdate,  // Keep both for compatibility
-            // Include all other claims
+            // Include all other claims (thumbnail already removed)
             ...idTokenClaims
           };
         } else {
@@ -359,11 +371,32 @@ export const exchangeCode = async (req, res, next) => {
     // (ID token was already decoded above)
 
     // Generate our own JWT tokens with complete user data
+    // Don't include the full ID token in JWT to avoid size issues with ngrok/proxies
+    const certiliaTokensForJWT = {
+      access_token: certiliaTokens.access_token,
+      refresh_token: certiliaTokens.refresh_token,
+      // Only include ID token if needed (but it makes JWT huge)
+      id_token: process.env.INCLUDE_ID_TOKEN_IN_JWT === 'true' ? certiliaTokens.id_token : undefined,
+      expires_in: certiliaTokens.expires_in,
+      token_type: certiliaTokens.token_type
+    };
+
     const completeUserInfo = {
       ...userInfo,
       ...idTokenClaims,
-      certilia_tokens: certiliaTokens, // Store original tokens for potential future use
+      certilia_tokens: certiliaTokensForJWT, // Store tokens without huge ID token
     };
+
+    // Debug: Log what we're putting in JWT
+    logger.debug('Creating JWT with user info:', {
+      userInfoKeys: Object.keys(userInfo),
+      idTokenClaimsKeys: Object.keys(idTokenClaims),
+      completeUserInfoKeys: Object.keys(completeUserInfo),
+      hasbirthdate: !!completeUserInfo.birthdate,
+      hasMobile: !!completeUserInfo.mobile,
+      hasFormatted: !!completeUserInfo.formatted,
+      hasGender: !!completeUserInfo.gender
+    });
 
     const tokens = tokenService.generateTokenPair(completeUserInfo);
 

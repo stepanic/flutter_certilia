@@ -150,6 +150,7 @@ USER_RESPONSE=$(curl -s "$API_URL/auth/user" \
   -H "ngrok-skip-browser-warning: true")
 
 echo -e "${GREEN}✅ Basic user info retrieved:${NC}"
+echo -e "${BLUE}Full basic user response:${NC}"
 # Show full response to debug differences between TEST and PROD
 echo "$USER_RESPONSE" | jq '.' 2>/dev/null || echo "$USER_RESPONSE"
 
@@ -175,12 +176,17 @@ if [ "$HTTP_CODE" = "200" ]; then
     # Extract and display available fields
     echo ""
     echo -e "${YELLOW}📋 Available fields in extended info:${NC}"
-    echo "$EXTENDED_BODY" | jq -r '.availableFields[]?' 2>/dev/null || echo "Could not parse available fields"
+    echo "$EXTENDED_BODY" | jq -r '.available_fields[]?' 2>/dev/null || echo "Could not parse available fields"
 
     echo ""
-    echo -e "${YELLOW}📊 Key field values:${NC}"
+    echo -e "${YELLOW}📊 Key field values (subset):${NC}"
     # Show only essential fields, not the full verbose response
-    echo "$EXTENDED_BODY" | jq '{userInfo: .userInfo | {sub, given_name, family_name, oib, email, birthdate, mobile, formatted}, fieldCount: (.availableFields | length)}' 2>/dev/null || echo "Could not parse fields"
+    echo "$EXTENDED_BODY" | jq '{user_info: .user_info | {sub, given_name, family_name, oib, email, birthdate, mobile, formatted}, field_count: (.available_fields | length)}' 2>/dev/null || echo "Could not parse fields"
+
+    echo ""
+    echo -e "${YELLOW}📄 Full extended info response:${NC}"
+    # Show the complete response JSON formatted nicely
+    echo "$EXTENDED_BODY" | jq '.' 2>/dev/null || echo "$EXTENDED_BODY"
 
 else
     echo -e "${RED}❌ Failed to get extended user info${NC}"
