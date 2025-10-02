@@ -104,6 +104,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/user', userRoutes);
 
+// Debug routes (only in dev/test or when explicitly enabled)
+if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
+  const debugRoutes = await import('./routes/debug.js');
+  app.use('/api/debug', debugRoutes.default);
+}
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
