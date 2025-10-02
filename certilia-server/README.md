@@ -1,326 +1,180 @@
-# Certilia OAuth2/OIDC Server Middleware
+# Certilia OAuth2 Server
 
-Node.js middleware server that handles OAuth2/OIDC authentication flow with Certilia IDP for mobile and web applications.
+Node.js middleware server that handles OAuth2/OIDC authentication flow with Certilia IDP for Flutter applications.
 
----
+## Quick Start
 
-## 🚀 QUICK START
+### Prerequisites
+- Node.js 18+
+- ngrok (for local development)
 
-**📖 Za detaljne upute, pogledajte: [START.md](START.md)**
+### Installation
+```bash
+npm install
+```
 
-### Najbrži način:
+### Running the Server
 
-#### 🧪 TEST Environment (idp.test.certilia.com):
+#### TEST Environment (idp.test.certilia.com)
 ```bash
 npm run dev:test
 ```
 
-#### 🚀 PRODUCTION Environment (idp.certilia.com):
+#### PRODUCTION Environment (idp.certilia.com)
 ```bash
 npm run dev:prod
 ```
 
-**Obje naredbe automatski:**
-- ✅ Kopiraju ispravni `.env` file
-- ✅ Pokreću server s auto-reload
-- ✅ Koriste ispravan Certilia endpoint
+Both commands automatically:
+- Copy the correct `.env` file
+- Start server with auto-reload
+- Use the appropriate Certilia endpoint
 
----
+### Development with ngrok
+```bash
+# Terminal 1
+ngrok http --url=your-domain.ngrok-free.app 3000
 
-## Overview
-
-This server acts as a secure middleware between your Flutter/mobile applications and Certilia IDP, handling:
-- OAuth2 Authorization Code Flow with PKCE
-- OpenID Connect (OIDC) authentication
-- Token management (access, refresh, ID tokens)
-- User profile retrieval
-- Session management
-
-## Certilia OAuth2 Application Registration
-
-When registering your application on https://developer.test.certilia.com/services/idp/create, use these settings:
-
-### Application Details
-- **Application Name**: Your app name (e.g., "My Mobile App")
-- **Application Type**: `Web Application` (even for mobile apps using this middleware)
-- **Grant Types**: 
-  - ✅ Authorization Code
-  - ✅ Refresh Token
-  - ❌ Client Credentials (not needed)
-  - ❌ Implicit (deprecated)
-
-### OAuth2 Configuration
-- **Redirect URIs**: 
-  ```
-  http://localhost:3000/api/auth/callback
-  https://your-production-domain.com/api/auth/callback
-  ```
-  (Add all environments where your server will run)
-
-- **Allowed Scopes**:
-  - ✅ `openid` (required for OIDC)
-  - ✅ `profile` (for user profile data)
-  - ✅ `eid` (for Croatian eID data)
-  - ✅ `email` (if available)
-  - ✅ `offline_access` (for refresh tokens)
-
-- **Token Endpoint Authentication Method**: `client_secret_post`
-
-- **Response Types**: `code` (Authorization Code)
-
-- **PKCE**: ✅ Required (S256)
-
-### Additional Settings
-- **Allowed CORS Origins**: 
-  ```
-  http://localhost:8080
-  http://localhost:3000
-  https://your-flutter-web-app.com
-  ```
-
-- **Token Expiration**:
-  - Access Token: 3600 seconds (1 hour)
-  - Refresh Token: 2592000 seconds (30 days)
-
-- **ID Token Algorithm**: RS256
+# Terminal 2
+npm run dev:test  # or dev:prod
+```
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
 │  Flutter App    │────▶│  Node.js Server │────▶│  Certilia IDP   │
 │                 │◀────│   (Middleware)  │◀────│                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
-## Quick Start for Development
-
-For local development with ngrok, see:
-- [DEVELOPMENT.md](./DEVELOPMENT.md) - Complete development setup guide
-- [CERTILIA_OAUTH_SETUP.md](./CERTILIA_OAUTH_SETUP.md) - Step-by-step Certilia Dashboard guide
-
-Quick start:
-```bash
-./dev-start.sh
-# In another terminal:
-ngrok http --url=uniformly-credible-opossum.ngrok-free.app 3000
-```
-
-## Installation
-
-1. Clone the repository
-2. Copy `.env.example` to `.env` and configure:
-
-```bash
-cp .env.example .env
-```
-
-3. Configure your environment:
-
-For **test environment**:
-```bash
-cp .env.example.test .env
-```
-
-For **production environment**:
-```bash
-cp .env.example.production .env
-# Update CERTILIA_REDIRECT_URI and CORS_ORIGIN with your production domain
-# Generate secure secrets for SESSION_SECRET
-```
-
-4. Install dependencies:
-
-```bash
-npm install
-```
-
-## Running the Server
-
-### Development
-```bash
-npm run dev
-```
-
-### Production
-```bash
-npm start
-```
-
-### Docker
-```bash
-docker-compose up -d
-```
-
 ## API Endpoints
 
-### 1. Initialize Authorization
+### Initialize Authorization
 ```
 GET /api/auth/initialize?redirect_uri=YOUR_APP_REDIRECT_URI
 ```
+Returns:
+- `authorization_url`: URL to redirect user for authentication
+- `session_id`: Session identifier for this auth flow
+- `state`: CSRF protection state parameter
 
-Starts the OAuth2 flow and returns:
-```json
-{
-  "authorization_url": "https://login.certilia.com/oauth/authorize?...",
-  "session_id": "uuid-v4",
-  "state": "random-state"
-}
-```
-
-### 2. OAuth Callback (Handled by Certilia)
-```
-GET /api/auth/callback?code=AUTH_CODE&state=STATE
-```
-
-This endpoint is called by Certilia after user authentication. Returns an HTML page that can be parsed by mobile apps.
-
-### 3. Exchange Code for Tokens
+### Exchange Code for Tokens
 ```
 POST /api/auth/exchange
-Content-Type: application/json
-
+```
+Body:
+```json
 {
-  "code": "authorization_code_from_callback",
+  "code": "authorization_code",
   "state": "state_from_callback",
   "session_id": "session_id_from_initialize"
 }
 ```
+Returns: Access token, refresh token, ID token, and user information
 
-Returns:
-```json
-{
-  "accessToken": "jwt_access_token",
-  "refreshToken": "jwt_refresh_token",
-  "tokenType": "Bearer",
-  "expiresIn": 3600,
-  "user": {
-    "sub": "user_unique_id",
-    "firstName": "Ivo",
-    "lastName": "Ivić",
-    "oib": "12345678901",
-    "email": "ivo@example.com",
-    "dateOfBirth": "1990-01-01"
-  }
-}
-```
-
-### 4. Refresh Token
+### Refresh Token
 ```
 POST /api/auth/refresh
-Content-Type: application/json
-
+```
+Body:
+```json
 {
   "refresh_token": "your_refresh_token"
 }
 ```
 
-### 5. Get User Info
+### Get User Info
 ```
 GET /api/auth/user
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
 
-### 6. Logout
+### Get Extended User Info
 ```
-POST /api/auth/logout
+GET /api/user/extended-info
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
+Returns all available user fields from Certilia
 
-## OIDC Flow Implementation
-
-This server implements the standard OIDC Authorization Code Flow:
-
-1. **User clicks login** → Flutter app calls `/api/auth/initialize`
-2. **Server prepares OAuth parameters** → Returns authorization URL with PKCE challenge
-3. **App opens authorization URL** → User redirected to Certilia IDP
-4. **User authenticates** → Uses Certilia Mobile ID
-5. **Certilia redirects back** → To `/api/auth/callback` with authorization code
-6. **App extracts code** → From callback HTML or deep link
-7. **App exchanges code** → Calls `/api/auth/exchange` with code and session ID
-8. **Server validates and exchanges** → Gets tokens from Certilia
-9. **Server returns JWT tokens** → App receives access token and user info
-10. **App uses access token** → For subsequent API calls
-
-## Security Considerations
-
-1. **PKCE Implementation**: Server automatically generates and validates PKCE parameters
-2. **State Validation**: Prevents CSRF attacks
-3. **Session Management**: Temporary sessions expire after 10 minutes
-4. **Token Security**: 
-   - Access tokens expire in 1 hour
-   - Refresh tokens expire in 7 days
-   - All tokens are signed with HS256
-5. **CORS Protection**: Only configured origins allowed
-6. **Rate Limiting**: 100 requests per 15 minutes per IP
-7. **HTTPS Required**: Use HTTPS in production
-
-## Flutter Integration
-
-Update your Flutter app to use this middleware:
-
-```dart
-// Configure the client to use your Node.js server
-final config = CertiliaConfig(
-  clientId: 'not-needed-for-client', // Server handles this
-  redirectUrl: 'your-app://callback',
-  serverUrl: 'http://localhost:3000', // Your Node.js server
-);
-
-// Initialize auth flow
-final response = await http.get(
-  Uri.parse('${config.serverUrl}/api/auth/initialize?redirect_uri=${config.redirectUrl}'),
-);
-
-final data = jsonDecode(response.body);
-final authUrl = data['authorization_url'];
-final sessionId = data['session_id'];
-
-// Open authUrl in browser/webview
-// ... handle callback ...
-
-// Exchange code for tokens
-final tokenResponse = await http.post(
-  Uri.parse('${config.serverUrl}/api/auth/exchange'),
-  headers: {'Content-Type': 'application/json'},
-  body: jsonEncode({
-    'code': extractedCode,
-    'state': extractedState,
-    'session_id': sessionId,
-  }),
-);
+### Health Check
+```
+GET /api/health
 ```
 
-## Environment Variables
+## Environment Configuration
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `NODE_ENV` | Environment (development/production) | No |
-| `PORT` | Server port (default: 3000) | No |
-| `CERTILIA_CLIENT_ID` | OAuth2 client ID from Certilia | Yes |
-| `CERTILIA_CLIENT_SECRET` | OAuth2 client secret from Certilia | Yes |
-| `CERTILIA_REDIRECT_URI` | OAuth2 callback URL | Yes |
-| `JWT_SECRET` | Secret for signing JWT tokens | Yes |
-| `SESSION_SECRET` | Secret for session management | Yes |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins | Yes |
-| `REDIS_URL` | Redis connection URL | No |
-| `LOG_LEVEL` | Logging level (info/debug/error) | No |
+Create `.env.local` for TEST environment:
+```env
+NODE_ENV=development
+PORT=3000
 
-## Production Deployment
+# Certilia OAuth Config
+CERTILIA_BASE_URL=https://idp.test.certilia.com
+CERTILIA_CLIENT_ID=your_client_id
+CERTILIA_CLIENT_SECRET=your_client_secret
+CERTILIA_REDIRECT_URI=https://your-domain.ngrok-free.app/api/auth/callback
 
-1. **Use HTTPS**: Required for OAuth2 security
-2. **Set strong secrets**: Generate cryptographically secure secrets
-3. **Configure Redis**: For production session storage
-4. **Set up monitoring**: Use the `/api/health` endpoints
-5. **Configure reverse proxy**: Use Nginx for SSL termination
-6. **Enable rate limiting**: Adjust limits based on your needs
+# Security
+JWT_SECRET=your_jwt_secret
+SESSION_SECRET=your_session_secret
 
-## Health Checks
+# CORS
+ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
+```
 
-- `GET /api/health` - Basic health check
-- `GET /api/health/ready` - Readiness probe
-- `GET /api/health/stats` - Server statistics
+Create `.env.local.production` for PRODUCTION environment with production credentials.
+
+## Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev:test` | Start with TEST environment |
+| `npm run dev:prod` | Start with PRODUCTION environment |
+| `npm run dev` | Start with current .env |
+| `npm run switch:test` | Switch to TEST config (without starting) |
+| `npm run switch:prod` | Switch to PROD config (without starting) |
+| `npm start` | Production mode (no auto-reload) |
+
+## Testing
+
+### Test OAuth Flow
+```bash
+./test-oauth-flow.sh
+```
+
+### Test Both Environments
+```bash
+./test-both-environments.sh
+```
+
+### Compare Extended Info (TEST vs PROD)
+```bash
+./compare-extended-info.sh
+```
+
+## Security Notes
+
+1. **Never commit credentials** - Use environment variables
+2. **PKCE Required** - Server implements PKCE for OAuth security
+3. **Session Management** - Sessions expire after 10 minutes
+4. **Token Security** - Access tokens expire in 1 hour
+5. **CORS Protection** - Only configured origins allowed
+6. **Rate Limiting** - Configured per IP
+
+## Deployment
+
+### Google Cloud Run
+```bash
+./deploy-cloud-run.sh
+# Enter credentials when prompted
+```
+
+### Docker
+```bash
+docker build -t certilia-server .
+docker run -p 3000:3000 --env-file .env certilia-server
+```
 
 ## License
 
