@@ -968,6 +968,16 @@ extension on _StatelessAuthViewState {
 
       if (!context.mounted) return;
 
+      // Ensure we can navigate (all dialogs are closed)
+      while (context.mounted && Navigator.canPop(context)) {
+        debugPrint('📝 Closing lingering dialog/route before navigation');
+        Navigator.pop(context);
+        await Future.delayed(const Duration(milliseconds: 50));
+        if (!context.mounted) break;
+      }
+
+      if (!context.mounted) return;
+
       // Refresh the page to show authenticated state
       Navigator.pushReplacement(
         context,

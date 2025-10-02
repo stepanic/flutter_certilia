@@ -36,6 +36,8 @@ class CertiliaWebViewClient {
   /// Authenticates the user using WebView and returns auth data
   /// This is a STATELESS operation - the caller must handle token storage
   Future<Map<String, dynamic>> authenticate(BuildContext context) async {
+    bool dialogShown = false;
+
     try {
       _log('Starting WebView authentication flow');
 
@@ -62,29 +64,39 @@ class CertiliaWebViewClient {
 
       // Show loading dialog while exchanging tokens
       if (context.mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (BuildContext dialogContext) {
-            return Center(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(Localizations.localeOf(dialogContext).languageCode == 'hr'
-                          ? 'Dovršavanje prijave...'
-                          : 'Completing authentication...'),
-                    ],
+        // Add a small delay to ensure WebView is fully closed
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext dialogContext) {
+              return WillPopScope(
+                onWillPop: () async => false,
+                child: Center(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(Localizations.localeOf(dialogContext).languageCode == 'hr'
+                              ? 'Dovršavanje prijave...'
+                              : 'Completing authentication...'),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        );
+              );
+            },
+          );
+          dialogShown = true;
+          _log('📋 Showing completion dialog');
+        }
       }
 
       // Exchange code for tokens
@@ -97,8 +109,11 @@ class CertiliaWebViewClient {
         );
       } finally {
         // Close loading dialog if still showing
-        if (context.mounted && Navigator.canPop(context)) {
+        if (dialogShown && context.mounted) {
+          _log('🔄 Closing completion dialog');
           Navigator.pop(context);
+          // Add small delay to ensure dialog is fully closed
+          await Future.delayed(const Duration(milliseconds: 100));
         }
       }
 
@@ -117,8 +132,10 @@ class CertiliaWebViewClient {
       _log('Authentication failed: $e');
 
       // Make sure to close any loading dialog
-      if (context.mounted && Navigator.canPop(context)) {
+      if (dialogShown && context.mounted) {
+        _log('🔄 Closing completion dialog after error');
         Navigator.pop(context);
+        await Future.delayed(const Duration(milliseconds: 50));
       }
 
       if (e is CertiliaException) {
