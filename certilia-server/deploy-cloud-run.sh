@@ -94,7 +94,7 @@ gcloud run deploy $SERVICE_NAME \
     --platform $PLATFORM \
     --allow-unauthenticated \
     --set-env-vars "NODE_ENV=production" \
-    --set-env-vars "PORT=8080" \
+    --port 8080 \
     --set-env-vars "CERTILIA_CLIENT_ID=$CLIENT_ID" \
     --set-env-vars "CERTILIA_BASE_URL=$CERTILIA_BASE_URL" \
     --set-env-vars "CERTILIA_AUTH_ENDPOINT=/oauth2/authorize" \
@@ -119,6 +119,12 @@ if [ $? -eq 0 ]; then
 
     # Get service URL
     SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
+    
+    # Update service with correct redirect URI
+    echo -e "\n${YELLOW}🔄 Updating redirect URI with service URL...${NC}"
+    gcloud run services update $SERVICE_NAME \
+        --region $REGION \
+        --set-env-vars "CERTILIA_REDIRECT_URI=$SERVICE_URL/api/auth/callback"
 
     echo -e "\n${BLUE}📋 Deployment Summary:${NC}"
     echo "Service URL: $SERVICE_URL"
