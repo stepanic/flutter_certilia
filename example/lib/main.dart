@@ -41,7 +41,7 @@ class _MyAppState extends State<MyApp> {
       routes: {
         '/': (context) => CertiliaAuthWidget(
           // Configuration - Only server URL is needed with proxy architecture
-          serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
+          serverUrl: 'https://transequatorial-jaylin-proappointment.ngrok-free.dev',
           scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
           enableLogging: true, // Set to true for development
           // Theme toggle callback
@@ -52,7 +52,7 @@ class _MyAppState extends State<MyApp> {
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
           builder: (context) => CertiliaAuthWidget(
-            serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
+            serverUrl: 'https://transequatorial-jaylin-proappointment.ngrok-free.dev',
             scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
             enableLogging: true,
             onThemeToggle: _toggleTheme,
