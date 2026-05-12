@@ -108,7 +108,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
 
     try {
       debugPrint('📱 [CertiliaAuthWidget] Initializing SDK...');
-      final certilia = await CertiliaSDKSimple.initialize(
+      final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
@@ -201,7 +201,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
       }
 
       // Use the SDK instance we already have for consistency
-      final certilia = await CertiliaSDKSimple.initialize(
+      final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
@@ -240,7 +240,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
   /// Refresh token
   Future<void> _refreshToken() async {
     try {
-      final certilia = await CertiliaSDKSimple.initialize(
+      final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,

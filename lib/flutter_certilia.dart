@@ -5,11 +5,11 @@
 library;
 
 // Primary SDK entry point (public API)
-export 'src/certilia_sdk_simple.dart';
+export 'src/certilia_sdk.dart';
 
 // Public models
 export 'src/models/certilia_user.dart';
-export 'src/models/certilia_config_simple.dart';
+export 'src/models/certilia_config.dart';
 export 'src/models/certilia_token.dart';
 export 'src/models/certilia_extended_info.dart';
 

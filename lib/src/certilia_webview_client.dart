@@ -175,6 +175,10 @@ class _CertiliaWebViewScreen extends StatefulWidget {
 }
 
 class _CertiliaWebViewScreenState extends State<_CertiliaWebViewScreen> {
+  /// Page is rendered at 80% of native size — Certilia's auth UI is
+  /// designed for desktop and is too cramped at phone widths.
+  static const double _pageZoom = 0.8;
+
   late final WebViewController _controller;
   bool _isLoading = true;
 
@@ -195,29 +199,7 @@ class _CertiliaWebViewScreenState extends State<_CertiliaWebViewScreen> {
           onPageStarted: (url) => _checkForCallback(url),
           onPageFinished: (url) {
             _checkForCallback(url);
-            // 80% zoom for better readability on phones (Certilia's auth UI
-            // is sized for desktop).
-            _controller.runJavaScript('''
-              var viewport = document.querySelector('meta[name="viewport"]');
-              if (!viewport) {
-                viewport = document.createElement('meta');
-                viewport.name = 'viewport';
-                viewport.content = 'width=device-width, initial-scale=0.8, maximum-scale=5.0, user-scalable=yes';
-                document.head.appendChild(viewport);
-              }
-              var style = document.createElement('style');
-              style.innerHTML = `
-                html {
-                  zoom: 0.8;
-                  -webkit-transform: scale(0.8);
-                  -webkit-transform-origin: 0 0;
-                  transform: scale(0.8);
-                  transform-origin: 0 0;
-                }
-                body { width: 125%; }
-              `;
-              document.head.appendChild(style);
-            ''');
+            _injectZoom();
           },
           onNavigationRequest: (request) {
             if (_checkForCallback(request.url)) {
@@ -228,6 +210,32 @@ class _CertiliaWebViewScreenState extends State<_CertiliaWebViewScreen> {
         ),
       )
       ..loadRequest(Uri.parse(widget.authorizationUrl));
+  }
+
+  void _injectZoom() {
+    final scale = _pageZoom;
+    final widthCompensation = (100 / _pageZoom).toStringAsFixed(0);
+    _controller.runJavaScript('''
+      var viewport = document.querySelector('meta[name="viewport"]');
+      if (!viewport) {
+        viewport = document.createElement('meta');
+        viewport.name = 'viewport';
+        viewport.content = 'width=device-width, initial-scale=$scale, maximum-scale=5.0, user-scalable=yes';
+        document.head.appendChild(viewport);
+      }
+      var style = document.createElement('style');
+      style.innerHTML = `
+        html {
+          zoom: $scale;
+          -webkit-transform: scale($scale);
+          -webkit-transform-origin: 0 0;
+          transform: scale($scale);
+          transform-origin: 0 0;
+        }
+        body { width: $widthCompensation%; }
+      `;
+      document.head.appendChild(style);
+    ''');
   }
 
   bool _checkForCallback(String url) {
