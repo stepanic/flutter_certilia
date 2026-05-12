@@ -443,7 +443,7 @@ export const exchangeCode = async (req, res, next) => {
  */
 export const refreshToken = async (req, res, next) => {
   try {
-    const { refresh_token } = req.body;
+    const { refresh_token, access_token: bodyAccessToken } = req.body;
 
     if (!refresh_token) {
       throw new ValidationError('Refresh token is required');
@@ -452,11 +452,13 @@ export const refreshToken = async (req, res, next) => {
     // Verify and decode refresh token
     const decoded = tokenService.verifyToken(refresh_token, 'refresh');
 
-    // Check if this is our JWT refresh token
-    // Get the current access token to extract certilia tokens
-    const authHeader = req.headers.authorization;
-    const accessToken = tokenService.extractTokenFromHeader(authHeader);
-    
+    // Prefer access_token from body; fall back to Authorization header for
+    // backward compatibility with older clients (pre-Phase-2B).
+    let accessToken = bodyAccessToken;
+    if (!accessToken) {
+      accessToken = tokenService.extractTokenFromHeader(req.headers.authorization);
+    }
+
     let certiliaTokens = null;
     if (accessToken) {
       try {

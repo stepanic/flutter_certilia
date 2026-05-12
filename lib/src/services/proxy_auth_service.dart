@@ -161,9 +161,9 @@ class ProxyAuthService {
 
   /// POST /api/auth/refresh — returns refreshed token bundle.
   ///
-  /// NOTE: refresh token currently travels in the Authorization header
-  /// (legacy server contract). Phase 2 will move this to the POST body
-  /// in coordination with certilia-server.
+  /// Both tokens travel in the JSON body. Earlier versions of this SDK put
+  /// the access token in the Authorization header; the server still accepts
+  /// that for backward compatibility but new code should use the body path.
   Future<Map<String, dynamic>> refresh({
     required String accessToken,
     required String refreshToken,
@@ -174,9 +174,11 @@ class ProxyAuthService {
           headers: {
             ..._baseHeaders,
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer $accessToken',
           },
-          body: jsonEncode({'refresh_token': refreshToken}),
+          body: jsonEncode({
+            'refresh_token': refreshToken,
+            'access_token': accessToken,
+          }),
         )
         .timeout(_refreshTimeout, onTimeout: () => throw _timeout('refresh'));
 

@@ -66,8 +66,13 @@ export const schemas = {
   }),
 
   // Token refresh
+  // `access_token` is optional — when present the server reads the
+  // certilia_tokens claim from it directly. Older clients send the access
+  // token in the Authorization header instead; the controller falls back to
+  // that path for backward compatibility.
   refreshToken: Joi.object({
     refresh_token: Joi.string().required(),
+    access_token: Joi.string().optional(),
   }),
 
   // Session ID
