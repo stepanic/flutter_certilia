@@ -31,7 +31,6 @@ class CertiliaSDK {
     List<String>? scopes,
     bool enableLogging = false,
     bool preferEphemeralSession = true,
-    int? sessionTimeout,
   }) async {
     final config = CertiliaConfig(
       serverUrl: serverUrl,
@@ -39,7 +38,6 @@ class CertiliaSDK {
           const ['openid', 'profile', 'eid', 'email', 'offline_access'],
       enableLogging: enableLogging,
       preferEphemeralSession: preferEphemeralSession,
-      sessionTimeout: sessionTimeout,
     );
     config.validate();
 

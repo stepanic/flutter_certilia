@@ -26,6 +26,11 @@ class CertiliaStatefulWrapper {
   CertiliaToken? _currentToken;
   CertiliaUser? _currentUser;
 
+  /// Completes when the constructor's initial token + user load has finished.
+  /// Async-public methods await this so callers don't see a fresh-instance
+  /// "not authenticated" before storage has been consulted.
+  late final Future<void> _ready;
+
   static const String _userStorageKey = 'certilia_user';
   static const FlutterSecureStorage _sharedStorage = FlutterSecureStorage();
 
@@ -47,7 +52,7 @@ class CertiliaStatefulWrapper {
           componentName: 'CertiliaStatefulWrapper',
           enableLogging: config.enableLogging,
         ) {
-    _initializeState();
+    _ready = _initializeState();
   }
 
   Future<void> _initializeState() async {
@@ -56,6 +61,12 @@ class CertiliaStatefulWrapper {
   }
 
   Future<CertiliaUser> authenticate(BuildContext context) async {
+    await _ready;
+    if (!context.mounted) {
+      throw const CertiliaAuthenticationException(
+        message: 'Context no longer mounted',
+      );
+    }
     _logger.log('Starting authentication...');
     final authData = await _client.authenticate(context);
     _logger.log('Auth data received from WebView');
@@ -79,13 +90,12 @@ class CertiliaStatefulWrapper {
       _currentToken != null && !_currentToken!.isExpired;
 
   Future<bool> checkAuthenticationStatus() async {
-    _currentToken ??= await _tokenStorage.loadToken();
+    await _ready;
     return isAuthenticated;
   }
 
   Future<CertiliaUser?> getCurrentUser() async {
-    _currentToken ??= await _tokenStorage.loadToken();
-    _currentUser ??= await _loadUser();
+    await _ready;
 
     if (_currentToken == null) return null;
 
@@ -123,7 +133,7 @@ class CertiliaStatefulWrapper {
   }
 
   Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
-    _currentToken ??= await _tokenStorage.loadToken();
+    await _ready;
     if (_currentToken == null || _currentToken!.isExpired) return null;
 
     try {
@@ -148,6 +158,7 @@ class CertiliaStatefulWrapper {
   }
 
   Future<void> logout() async {
+    await _ready;
     _currentToken = null;
     _currentUser = null;
     await _tokenStorage.deleteToken();

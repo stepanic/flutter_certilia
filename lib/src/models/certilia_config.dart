@@ -21,16 +21,11 @@ class CertiliaConfig {
   /// Enable verbose SDK logging.
   final bool enableLogging;
 
-  /// Session timeout in milliseconds. Currently informational only — wiring
-  /// to live enforcement is tracked as a Phase 2 task.
-  final int? sessionTimeout;
-
   const CertiliaConfig({
     required this.serverUrl,
     this.scopes = const ['openid', 'profile', 'eid'],
     this.preferEphemeralSession = true,
     this.enableLogging = false,
-    this.sessionTimeout,
   });
 
   void validate() {
@@ -53,16 +48,14 @@ class CertiliaConfig {
           serverUrl == other.serverUrl &&
           listEquals(scopes, other.scopes) &&
           preferEphemeralSession == other.preferEphemeralSession &&
-          enableLogging == other.enableLogging &&
-          sessionTimeout == other.sessionTimeout;
+          enableLogging == other.enableLogging;
 
   @override
   int get hashCode =>
       serverUrl.hashCode ^
       scopes.hashCode ^
       preferEphemeralSession.hashCode ^
-      enableLogging.hashCode ^
-      sessionTimeout.hashCode;
+      enableLogging.hashCode;
 
   @override
   String toString() {
@@ -70,8 +63,7 @@ class CertiliaConfig {
         'serverUrl: $serverUrl, '
         'scopes: $scopes, '
         'preferEphemeralSession: $preferEphemeralSession, '
-        'enableLogging: $enableLogging, '
-        'sessionTimeout: $sessionTimeout)';
+        'enableLogging: $enableLogging)';
   }
 }
 

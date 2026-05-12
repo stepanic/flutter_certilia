@@ -32,6 +32,11 @@ class CertiliaWebClient {
 
   CertiliaToken? _currentToken;
 
+  /// Completes when the constructor's initial token load has finished.
+  /// Async-public methods await this so callers don't see "not authenticated"
+  /// before storage has been consulted.
+  late final Future<void> _ready;
+
   static const Duration _pollingInterval = Duration(seconds: 2);
   static const Duration _popupCheckInterval = Duration(seconds: 1);
   static const Duration _pollingTimeout = Duration(minutes: 5);
@@ -57,7 +62,7 @@ class CertiliaWebClient {
             ),
         _tokenStorage = tokenStorage ?? TokenStorageService() {
     config.validate();
-    _initializeTokens();
+    _ready = _initializeTokens();
   }
 
   Future<void> _initializeTokens() async {
@@ -73,6 +78,7 @@ class CertiliaWebClient {
   /// tokens, returns the resolved user.
   Future<CertiliaUser> authenticate(BuildContext context) async {
     try {
+      await _ready;
       _logger.log('Starting web authentication flow');
 
       final authData = await _proxy.initialize();
@@ -216,13 +222,13 @@ class CertiliaWebClient {
       _currentToken != null && !_currentToken!.isExpired;
 
   Future<bool> checkAuthenticationStatus() async {
-    _currentToken ??= await _tokenStorage.loadToken();
+    await _ready;
     return isAuthenticated;
   }
 
   Future<CertiliaUser?> getCurrentUser() async {
     try {
-      _currentToken ??= await _tokenStorage.loadToken();
+      await _ready;
       if (_currentToken == null) return null;
 
       if (_currentToken!.isExpired) {
@@ -266,6 +272,7 @@ class CertiliaWebClient {
   }
 
   Future<void> logout() async {
+    await _ready;
     _logger.log('Logging out user');
     _currentToken = null;
     await _tokenStorage.deleteToken();
@@ -274,7 +281,7 @@ class CertiliaWebClient {
   /// Returns extended user info. Auto-refreshes once on 401, auto-logs-out
   /// if refresh fails.
   Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
-    _currentToken ??= await _tokenStorage.loadToken();
+    await _ready;
     if (_currentToken == null || _currentToken!.isExpired) {
       _logger.log('No valid token for extended info');
       return null;
