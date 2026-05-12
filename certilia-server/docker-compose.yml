@@ -1,0 +1,66 @@
+# docker-compose for deploying certilia-server on Coolify (or any
+# docker-compose-aware host).
+#
+# Usage on Coolify:
+#   1. Add this directory as a new "Docker Compose" resource.
+#   2. Set the environment variables from .env.example.coolify in
+#      Coolify's UI (not in a committed file).
+#   3. Point your domain at the service and let Coolify provision TLS.
+#
+# Usage locally:
+#   docker compose up --build
+#   (with a sibling .env file populated from .env.example.coolify)
+
+services:
+  certilia-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: certilia-server:${TAG:-latest}
+    restart: unless-stopped
+    # Coolify (and most reverse-proxy setups) terminate TLS and route to
+    # the container on this port. The app reads PORT at startup.
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      # Server
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 8080
+      HOST: 0.0.0.0
+
+      # Certilia OAuth (per-deploy values — set in Coolify UI)
+      CERTILIA_CLIENT_ID: ${CERTILIA_CLIENT_ID}
+      CERTILIA_CLIENT_SECRET: ${CERTILIA_CLIENT_SECRET}
+      CERTILIA_REDIRECT_URI: ${CERTILIA_REDIRECT_URI}
+      CERTILIA_BASE_URL: ${CERTILIA_BASE_URL:-https://idp.certilia.com}
+      CERTILIA_AUTH_ENDPOINT: ${CERTILIA_AUTH_ENDPOINT:-/oauth2/authorize}
+      CERTILIA_TOKEN_ENDPOINT: ${CERTILIA_TOKEN_ENDPOINT:-/oauth2/token}
+      CERTILIA_USERINFO_ENDPOINT: ${CERTILIA_USERINFO_ENDPOINT:-/oauth2/userinfo}
+      CERTILIA_DISCOVERY_ENDPOINT: ${CERTILIA_DISCOVERY_ENDPOINT:-/oauth2/oidcdiscovery/.well-known/openid-configuration}
+
+      # Security secrets (generate with `openssl rand -hex 64`)
+      JWT_SECRET: ${JWT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      JWT_EXPIRY: ${JWT_EXPIRY:-1h}
+      REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY:-7d}
+
+      # CORS — comma-separated list of Flutter app origins
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # Rate limiting
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:8080/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
