@@ -3,251 +3,40 @@
 [![pub package](https://img.shields.io/pub/v/flutter_certilia.svg)](https://pub.dev/packages/flutter_certilia)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Flutter SDK for Certilia Identity API integration. Supports OAuth 2.0 authentication with Croatian eID (eOsobna) through NIAS system.
+Flutter SDK for authenticating Croatian users with their electronic ID
+card (eOsobna) via Certilia / NIAS. Works on iOS, Android, and Web.
 
-Flutter SDK za integraciju s Certilia Identity API-jem. Podržava OAuth 2.0 autentifikaciju s hrvatskom elektroničkom osobnom iskaznicom (eOsobna) kroz NIAS sustav.
+Flutter SDK za autentifikaciju hrvatskih korisnika preko elektroničke
+osobne iskaznice (eOsobna) kroz Certiliju / NIAS. Radi na iOS-u, Androidu
+i Webu.
 
-## Features
+## Architecture
 
-- 🔐 OAuth 2.0 authentication with PKCE support
-- 🆔 Croatian eID (eOsobna) integration through NIAS
-- 📱 Support for iOS, Android, and Web platforms
-- 🔄 Automatic token refresh
-- 💾 Secure token storage
-- 🛡️ Null safety
-- 📝 Comprehensive logging
+The SDK is **proxy-only**. The Flutter client never talks to Certilia
+directly — all OAuth communication is mediated by a backend
+(`certilia-server`, included in this repo) that holds the OAuth
+credentials.
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Flutter client │────▶│  Your proxy      │────▶│  Certilia IDP   │
+│  (this SDK)     │◀────│  (certilia-      │◀────│                 │
+└─────────────────┘     │   server)        │     └─────────────────┘
+                        └──────────────────┘
+```
+
+Direct integration was tried and abandoned — Certilia rejects custom
+URL schemes (blocking AppAuth on mobile) and Certilia's `userinfo`
+endpoint requires server-side fallbacks to be reliable in production.
+See [`REFACTOR_PLAN.md`](REFACTOR_PLAN.md) for the full history.
+
+On mobile/desktop the SDK drives an in-app `WebView` against the proxy.
+On Web it opens a popup and polls the proxy until auth completes
+(`postMessage` cross-origin is unreliable with the Croatian eID flow).
 
 ## Installation
 
-Add `flutter_certilia` to your `pubspec.yaml`:
-
-```yaml
-dependencies:
-  flutter_certilia: ^0.1.0
-```
-
-Then run:
-
-```bash
-flutter pub get
-```
-
-## Usage
-
-### Recommended: Client-Server Architecture
-
-For production applications, we recommend using a backend proxy server:
-
-```dart
-import 'package:flutter_certilia/flutter_certilia.dart';
-
-// Simple configuration - Flutter only knows about YOUR server
-final certilia = await CertiliaSDKSimple.initialize(
-  clientId: 'your_client_id',
-  serverUrl: 'https://your-backend-server.com',
-  scopes: ['openid', 'profile', 'eid'],
-);
-
-// Authenticate
-final user = await certilia.authenticate(context);
-```
-
-Benefits:
-- ✅ API credentials stay secure on your server
-- ✅ Simplified Flutter client configuration
-- ✅ Centralized OAuth flow management
-- ✅ Better security and control
-
-### Alternative: Direct Integration
-
-```dart
-// Direct configuration (not recommended for production)
-final config = CertiliaConfig(
-  clientId: 'your_client_id',
-  redirectUrl: 'com.example.app://callback',
-  baseUrl: 'https://idp.test.certilia.com',
-  // ... other API endpoints
-);
-
-final certilia = CertiliaClient(config: config);
-
-// Authenticate user
-try {
-  final user = await certilia.authenticate();
-  print('Welcome ${user.fullName}!');
-  print('OIB: ${user.oib}');
-} catch (e) {
-  print('Authentication failed: $e');
-}
-
-// Check if authenticated
-if (certilia.isAuthenticated) {
-  // Get current user
-  final user = await certilia.getCurrentUser();
-}
-
-// Logout
-await certilia.logout();
-```
-
-### Advanced Configuration
-
-```dart
-final config = CertiliaConfig(
-  clientId: 'your_client_id',
-  redirectUrl: 'com.example.app://callback',
-  scopes: ['openid', 'profile', 'eid'],
-  preferEphemeralSession: true,  // iOS only
-  enableLogging: true,  // Enable debug logs
-  customUserAgent: 'MyApp/1.0',  // Custom user agent
-);
-```
-
-## Platform Configuration
-
-### iOS
-
-Add the following to your `ios/Runner/Info.plist`:
-
-```xml
-<key>CFBundleURLTypes</key>
-<array>
-    <dict>
-        <key>CFBundleURLSchemes</key>
-        <array>
-            <string>com.example.app</string>
-        </array>
-    </dict>
-</array>
-```
-
-### Android
-
-1. Add the following to your `android/app/build.gradle`:
-
-```gradle
-android {
-    defaultConfig {
-        manifestPlaceholders += [
-            'appAuthRedirectScheme': 'com.example.app'
-        ]
-    }
-}
-```
-
-2. Ensure minimum SDK version is 16 or higher:
-
-```gradle
-android {
-    defaultConfig {
-        minSdkVersion 16
-    }
-}
-```
-
-### Web
-
-No additional configuration required for web platform.
-
-## API Reference
-
-### CertiliaClient
-
-Main client class for authentication operations.
-
-#### Methods
-
-- `authenticate()` - Performs OAuth authentication flow
-- `getCurrentUser()` - Gets the currently authenticated user
-- `refreshToken()` - Refreshes the access token
-- `logout()` - Clears local authentication state
-- `endSession()` - Ends the OAuth session at the server
-
-### CertiliaConfig
-
-Configuration object for the client.
-
-#### Properties
-
-- `clientId` - OAuth client ID (required)
-- `redirectUrl` - OAuth redirect URL (required)
-- `scopes` - List of OAuth scopes (default: `['openid', 'profile', 'eid']`)
-- `preferEphemeralSession` - Use ephemeral session on iOS (default: `true`)
-- `enableLogging` - Enable debug logging (default: `false`)
-
-### CertiliaUser
-
-User object containing identity information.
-
-#### Properties
-
-- `sub` - Unique user identifier
-- `firstName` - User's first name
-- `lastName` - User's last name
-- `fullName` - Combined first and last name
-- `oib` - Croatian tax number (OIB)
-- `dateOfBirth` - User's date of birth
-- `email` - User's email address
-
-## Error Handling
-
-The SDK provides specific exception types for different error scenarios:
-
-```dart
-try {
-  await certilia.authenticate();
-} on CertiliaAuthenticationException catch (e) {
-  // Handle authentication errors
-  print('Auth failed: ${e.message}');
-} on CertiliaNetworkException catch (e) {
-  // Handle network errors
-  print('Network error: ${e.message} (HTTP ${e.statusCode})');
-} on CertiliaConfigurationException catch (e) {
-  // Handle configuration errors
-  print('Config error: ${e.message}');
-} catch (e) {
-  // Handle other errors
-}
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication cancelled**
-   - Ensure redirect URL is properly configured
-   - Check that the app URL scheme matches the redirect URL
-
-2. **Network errors**
-   - Verify internet connectivity
-   - Check that Certilia servers are accessible
-
-3. **Token refresh fails**
-   - Ensure refresh token is available
-   - Check token expiration
-
-### Debug Mode
-
-Enable logging to troubleshoot issues:
-
-```dart
-final config = CertiliaConfig(
-  clientId: 'your_client_id',
-  redirectUrl: 'com.example.app://callback',
-  enableLogging: true,
-);
-```
-
-## Use in another Flutter app
-
-The full Phase-5 rewrite of this README is pending; large parts of the
-sections above describe the deprecated 0.1.x direct-integration paths.
-For 0.2.0+ the only supported architecture is proxy-only — the steps
-below get you running against an existing `certilia-server`.
-
-### 1. Add the dependency
-
-Until 0.2.0 is published to pub.dev, depend on the repo directly:
+The 0.2.0 line is not yet on pub.dev. Use a `git:` or `path:` dep:
 
 ```yaml
 dependencies:
@@ -257,18 +46,18 @@ dependencies:
       ref: main
 ```
 
-Or use a `path:` dep for local development:
-
 ```yaml
 dependencies:
   flutter_certilia:
     path: ../flutter_certilia
 ```
 
-### 2. Point at your proxy server
+Requirements: Dart `>=3.2.0`, Flutter `>=3.16.0`.
 
-The Flutter SDK only needs the proxy URL — credentials live on the
-server. In your app:
+## Usage
+
+The SDK has one entry point. The proxy URL is the only required value
+— everything else is sensible defaults you can override.
 
 ```dart
 import 'package:flutter_certilia/flutter_certilia.dart';
@@ -283,37 +72,95 @@ final certilia = await CertiliaSDK.initialize(
 );
 ```
 
-Override the URL per build:
-
-```bash
-flutter run --dart-define=CERTILIA_SERVER_URL=https://your-proxy.example
-```
-
-### 3. Drive the auth flow
-
-The returned `certilia` object exposes the same surface on all
-platforms (the runtime type differs between web and mobile, but the
-methods you'll call do not):
+Drive the auth flow. The runtime type returned by `initialize` differs
+between web and mobile, but the methods you'll call are the same:
 
 ```dart
-final user = await certilia.authenticate(context);   // opens popup / WebView
+final user = await certilia.authenticate(context); // popup / WebView
 final isAuthed = await certilia.checkAuthenticationStatus();
 final extended = await certilia.getExtendedUserInfo();
 await certilia.refreshToken();
 await certilia.logout();
 ```
 
-### 4. Build your own UI
+Override the proxy URL per build without touching code:
 
-`flutter_certilia` ships API-only — no opinionated widgets, no theme.
-The `example/lib/certilia_auth/` directory in this repo contains a
-working reference UI (login button, authenticated view, user-info
-cards, theme toggle) that you can copy-paste and adapt to your app's
-design system.
+```bash
+flutter run --dart-define=CERTILIA_SERVER_URL=https://your-proxy.example
+```
+
+### UI
+
+`flutter_certilia` ships **API-only**. There are no opinionated widgets
+or themes — your app keeps full control of its design system.
+[`example/lib/certilia_auth/`](example/lib/certilia_auth/) is a working
+reference UI (login button, authenticated view, user-info cards, theme
+toggle) that you can copy-paste and adapt.
+
+## Public API
+
+| Symbol | Purpose |
+|---|---|
+| `CertiliaSDK.initialize(...)` | Build a platform-appropriate client |
+| `CertiliaConfig` | Configuration object (proxy URL, scopes, logging) |
+| `CertiliaUser` | Basic user profile (`sub`, `firstName`, `lastName`, `oib`, `email`, ...) |
+| `CertiliaToken` | Access/refresh/ID tokens + expiry helpers |
+| `CertiliaExtendedInfo` | Full Certilia profile — any field the upstream returned |
+| `CertiliaException` | Base exception; subclasses below |
+| `CertiliaAuthenticationException` | OAuth flow failed |
+| `CertiliaNetworkException` | HTTP-level failure with `statusCode` |
+| `CertiliaConfigurationException` | Misconfigured SDK |
+
+Deprecated typedefs (`CertiliaSDKSimple`, `CertiliaConfigSimple`) are
+kept for one minor release; they map directly to the new names and
+will be removed in 1.0.0.
+
+## Error handling
+
+```dart
+try {
+  await certilia.authenticate(context);
+} on CertiliaAuthenticationException catch (e) {
+  // User cancelled or upstream rejected the flow
+} on CertiliaNetworkException catch (e) {
+  // HTTP error reaching the proxy
+  print('Proxy returned ${e.statusCode}: ${e.message}');
+} on CertiliaConfigurationException catch (e) {
+  // SDK misconfigured
+}
+```
+
+## Platform notes
+
+- **iOS, Android**: no scheme-registration needed — auth happens in an
+  in-app `WebView`, and the proxy's HTTPS callback is what closes the
+  loop, not a custom URL scheme.
+- **Web**: opens a popup against the proxy. The proxy's CORS config
+  must allow your origin. The SDK does **not** send custom request
+  headers from web for this reason (custom headers trigger preflight).
+- **Desktop**: `webview_flutter` does not ship a desktop backend; the
+  SDK isn't tested on macOS/Windows/Linux. Add the appropriate
+  platform plugin if you need it.
+
+The `certilia-server` proxy that the SDK talks to is in this repo at
+[`certilia-server/`](certilia-server/) — see its README for setup,
+environment variables, and the supported endpoint contract.
+
+## Troubleshooting
+
+- **"Authentication was cancelled"** — popup blocked on web (allow
+  popups for your origin) or user closed the WebView. Check
+  DevTools console / device logs.
+- **`CertiliaNetworkException` on `/api/auth/initialize`** — the
+  proxy URL is wrong, the proxy is down, or CORS is blocking your
+  origin. `enableLogging: true` plus the browser network tab will
+  point at the actual failing request.
+- **Logged in but `getCurrentUser()` returns null right after hot
+  restart** — was a real bug pre-0.2.0; the constructor's init
+  future is now awaited before any public method runs. If you still
+  see it, file an issue.
 
 ## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -323,8 +170,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
 
 ## Support
 
-For issues and feature requests, please use the [GitHub issue tracker](https://github.com/stepanic/flutter_certilia/issues).
+[GitHub issue tracker](https://github.com/stepanic/flutter_certilia/issues).
