@@ -13,8 +13,10 @@ Flutter SDK za prijavu hrvatskom elektroničkom osobnom iskaznicom
 backend proxyjem (`certilia-server/` u istom repu); proxy drži OAuth
 credentialse i razgovara s Certilia IDP-om.
 
-```
-Flutter (this SDK) ⇄ certilia-server (Node.js) ⇄ Certilia IDP
+```mermaid
+flowchart LR
+    A[Flutter app<br/>flutter_certilia SDK] <--> B[certilia-server<br/>Node.js proxy]
+    B <--> C[Certilia IDP]
 ```
 
 ## Što NE smije biti predloženo
@@ -87,6 +89,27 @@ Modeli izvezeni: `CertiliaConfig`, `CertiliaUser`, `CertiliaToken`,
 `CertiliaAuthenticationException`, `CertiliaNetworkException`,
 `CertiliaConfigurationException`. Deprecated typedef-ovi:
 `CertiliaSDKSimple = CertiliaSDK`, `CertiliaConfigSimple = CertiliaConfig`.
+
+## Interna arhitektura
+
+```mermaid
+flowchart TD
+    SDK[CertiliaSDK.initialize] --> F{Platform?}
+    F -->|web| WC[CertiliaWebClient]
+    F -->|mobile/desktop| SW[CertiliaStatefulWrapper]
+    SW --> WV[CertiliaWebViewClient]
+    WC --> PAS[ProxyAuthService]
+    WV --> PAS
+    WC --> TSS[TokenStorageService]
+    SW --> TSS
+    PAS -->|HTTP| Proxy[(certilia-server)]
+    TSS -->|secure storage| Native[(keychain / KeyStore)]
+```
+
+Tri sloja: **entry / orchestration** (SDK, klijenti, wrapper), **shared
+services** (HTTP, storage, logger), **platforma-specifični UI**
+(WebView, popup). Sve HTTP komunikacije obavezno kroz
+`ProxyAuthService`; sva persistencija kroz `TokenStorageService`.
 
 ## Tok podataka
 

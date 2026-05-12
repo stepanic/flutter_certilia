@@ -41,12 +41,18 @@ npm run dev:test  # or dev:prod
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    A[Flutter app<br/>flutter_certilia SDK] -->|HTTPS| B[Node.js proxy<br/>certilia-server]
+    B -->|OAuth 2.0| C[Certilia IDP<br/>idp.test.certilia.com<br/>or idp.certilia.com]
+    C -.->|tokens, userinfo| B
+    B -.->|JWT, user| A
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Flutter App    │────▶│  Node.js Server │────▶│  Certilia IDP   │
-│                 │◀────│   (Middleware)  │◀────│                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
+
+The proxy holds the Certilia client_id / client_secret so the Flutter
+app never sees them. It also normalizes the userinfo response (Certilia
+production occasionally returns inconsistent shapes — the proxy falls
+back to ID-token claims).
 
 ## API Endpoints
 
@@ -80,9 +86,16 @@ POST /api/auth/refresh
 Body:
 ```json
 {
-  "refresh_token": "your_refresh_token"
+  "refresh_token": "your_refresh_token",
+  "access_token": "current_access_token"
 }
 ```
+
+The `access_token` field carries the previous access token so the
+server can extract the upstream Certilia tokens from its JWT claims.
+Older clients (pre-flutter_certilia 0.2.0) send this in the
+`Authorization: Bearer` header instead — the controller accepts both
+shapes.
 
 ### Get User Info
 ```

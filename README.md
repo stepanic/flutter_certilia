@@ -17,12 +17,12 @@ directly — all OAuth communication is mediated by a backend
 (`certilia-server`, included in this repo) that holds the OAuth
 credentials.
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Flutter client │────▶│  Your proxy      │────▶│  Certilia IDP   │
-│  (this SDK)     │◀────│  (certilia-      │◀────│                 │
-└─────────────────┘     │   server)        │     └─────────────────┘
-                        └──────────────────┘
+```mermaid
+flowchart LR
+    A[Flutter client<br/>flutter_certilia] -->|HTTPS| B[Your proxy<br/>certilia-server]
+    B -->|OAuth 2.0| C[Certilia IDP]
+    C -.-> B
+    B -.->|JWT, user| A
 ```
 
 Direct integration was tried and abandoned — Certilia rejects custom
@@ -30,9 +30,41 @@ URL schemes (blocking AppAuth on mobile) and Certilia's `userinfo`
 endpoint requires server-side fallbacks to be reliable in production.
 See [`REFACTOR_PLAN.md`](REFACTOR_PLAN.md) for the full history.
 
-On mobile/desktop the SDK drives an in-app `WebView` against the proxy.
-On Web it opens a popup and polls the proxy until auth completes
-(`postMessage` cross-origin is unreliable with the Croatian eID flow).
+The auth flow differs slightly by platform:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as Flutter app
+    participant SDK as flutter_certilia
+    participant Proxy as certilia-server
+    participant IDP as Certilia IDP
+
+    App->>SDK: authenticate(context)
+    SDK->>Proxy: GET /api/auth/initialize
+    Proxy-->>SDK: authorization_url, state, session_id
+
+    alt Mobile / desktop
+        SDK->>SDK: open in-app WebView
+        SDK->>IDP: authorize (via WebView)
+        IDP-->>SDK: redirect to proxy callback with code
+    else Web
+        SDK->>Proxy: POST /api/auth/polling/start
+        SDK->>SDK: open popup window
+        SDK->>IDP: authorize (via popup)
+        IDP->>Proxy: GET /api/auth/callback
+        loop every 2s
+            SDK->>Proxy: GET /api/auth/polling/:id/status
+        end
+        Proxy-->>SDK: status: completed, code
+    end
+
+    SDK->>Proxy: POST /api/auth/exchange (code, state, session_id)
+    Proxy->>IDP: token exchange
+    IDP-->>Proxy: tokens
+    Proxy-->>SDK: accessToken, refreshToken, idToken, user
+    SDK-->>App: CertiliaUser
+```
 
 ## Installation
 

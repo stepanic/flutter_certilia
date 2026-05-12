@@ -4,6 +4,14 @@ Five steps from a fresh Flutter project to a working "Login with
 Certilia" button. Assumes you already have a running `certilia-server`
 (see [`certilia-server/README.md`](certilia-server/README.md)).
 
+```mermaid
+flowchart TD
+    A[1. Add git/path dep] --> B[2. Configure proxy URL<br/>via --dart-define]
+    B --> C[3. CertiliaSDK.initialize]
+    C --> D[4. authenticate / refresh / logout]
+    D --> E[5. Optional: copy example UI]
+```
+
 ## 1. Add the dependency
 
 In your app's `pubspec.yaml`:
