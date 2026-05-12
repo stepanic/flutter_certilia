@@ -1,201 +1,143 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import 'certilia_webview_client.dart';
+import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
+import 'models/certilia_extended_info.dart';
 import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
-import 'models/certilia_extended_info.dart';
-import 'exceptions/certilia_exception.dart';
 import 'services/certilia_logger.dart';
+import 'services/token_storage_service.dart';
 
-/// Stateful wrapper around the stateless CertiliaWebViewClient
-/// This wrapper manages token storage and state management
+/// Stateful wrapper around the stateless [CertiliaWebViewClient].
+///
+/// Manages token + user persistence, refresh-on-expiry, and cached user
+/// state. Used on mobile/desktop targets; the web target's
+/// `CertiliaWebClient` is already stateful by necessity (popup polling).
 class CertiliaStatefulWrapper {
   final CertiliaWebViewClient _client;
-  final FlutterSecureStorage _storage;
+  final TokenStorageService _tokenStorage;
+  final FlutterSecureStorage _userStorage;
   final CertiliaLogger _logger;
 
-  // In-memory state
   CertiliaToken? _currentToken;
   CertiliaUser? _currentUser;
 
-  // Storage keys
-  static const String _tokenStorageKey = 'certilia_token';
   static const String _userStorageKey = 'certilia_user';
-
-  // Shared storage instance for static methods
   static const FlutterSecureStorage _sharedStorage = FlutterSecureStorage();
 
   CertiliaStatefulWrapper({
     required CertiliaConfig config,
-    String? serverUrl,
+    required String serverUrl,
     FlutterSecureStorage? storage,
-  }) : _client = CertiliaWebViewClient(
-          config: config,
-          serverUrl: serverUrl,
-        ),
-        _storage = storage ?? const FlutterSecureStorage(),
+    TokenStorageService? tokenStorage,
+    CertiliaWebViewClient? client,
+  })  : _client = client ??
+            CertiliaWebViewClient(
+              config: config,
+              serverUrl: serverUrl,
+            ),
+        _tokenStorage =
+            tokenStorage ?? TokenStorageService(storage: storage),
+        _userStorage = storage ?? const FlutterSecureStorage(),
         _logger = CertiliaLogger(
           componentName: 'CertiliaStatefulWrapper',
           enableLogging: config.enableLogging,
         ) {
-    // Load saved state on initialization
     _initializeState();
   }
 
-  /// Initialize state from storage
   Future<void> _initializeState() async {
-    try {
-      await _loadToken();
-      await _loadUser();
-    } catch (e) {
-      // Silent fail - continue without saved state
-    }
+    _currentToken = await _tokenStorage.loadToken();
+    _currentUser = await _loadUser();
   }
 
-  /// Authenticate using WebView and manage state
   Future<CertiliaUser> authenticate(BuildContext context) async {
-    _logger.log('🔐 Starting authentication...');
-    // Call stateless authenticate
+    _logger.log('Starting authentication...');
     final authData = await _client.authenticate(context);
-    _logger.log('📦 Auth data received from WebView');
+    _logger.log('Auth data received from WebView');
 
-    // Create token object
-    _currentToken = CertiliaToken(
-      accessToken: authData['accessToken'],
-      refreshToken: authData['refreshToken'],
-      idToken: authData['idToken'],
-      expiresAt: authData['expiresIn'] != null
-          ? DateTime.now().add(Duration(seconds: authData['expiresIn']))
-          : null,
-      tokenType: authData['tokenType'] ?? 'Bearer',
-    );
+    _currentToken = _tokenFromResponse(authData);
+    await _tokenStorage.saveToken(_currentToken!);
 
-    // Save token
-    await _saveToken(_currentToken!);
-
-    // Extract or fetch user
     if (authData['user'] != null) {
-      _currentUser = CertiliaUser.fromJson(authData['user']);
+      _currentUser =
+          CertiliaUser.fromJson(authData['user'] as Map<String, dynamic>);
     } else {
       _currentUser = await _client.getUserInfo(_currentToken!.accessToken);
     }
-
-    // Save user
     if (_currentUser != null) {
       await _saveUser(_currentUser!);
     }
-
     return _currentUser!;
   }
 
-  /// Check if authenticated
-  bool get isAuthenticated {
-    return _currentToken != null && !_currentToken!.isExpired;
-  }
+  bool get isAuthenticated =>
+      _currentToken != null && !_currentToken!.isExpired;
 
-  /// Check authentication status (with storage load)
   Future<bool> checkAuthenticationStatus() async {
-    if (_currentToken == null) {
-      await _loadToken();
-    }
+    _currentToken ??= await _tokenStorage.loadToken();
     return isAuthenticated;
   }
 
-  /// Get current user
   Future<CertiliaUser?> getCurrentUser() async {
-    if (_currentToken == null) {
-      await _loadToken();
-    }
-    if (_currentUser == null) {
-      await _loadUser();
-    }
+    _currentToken ??= await _tokenStorage.loadToken();
+    _currentUser ??= await _loadUser();
 
-    if (_currentToken == null) {
-      return null;
-    }
+    if (_currentToken == null) return null;
 
-    // Check if token is expired
     if (_currentToken!.isExpired) {
-      // Try to refresh
-      if (_currentToken!.refreshToken != null) {
-        await refreshToken();
-      } else {
-        return null;
-      }
+      if (_currentToken!.refreshToken == null) return null;
+      await refreshToken();
     }
 
-    // Return cached user or fetch
-    if (_currentUser != null) {
-      return _currentUser;
-    }
+    if (_currentUser != null) return _currentUser;
 
     _currentUser = await _client.getUserInfo(_currentToken!.accessToken);
     if (_currentUser != null) {
       await _saveUser(_currentUser!);
     }
-
     return _currentUser;
   }
 
-  /// Refresh token
   Future<void> refreshToken() async {
     if (_currentToken?.refreshToken == null) {
       throw const CertiliaAuthenticationException(
         message: 'No refresh token available',
       );
     }
-
-    _logger.log('🔄 Starting token refresh...');
-    _logger.debug('📝 Old token expiry: ${_currentToken?.expiresAt}');
-
+    _logger.log('Starting token refresh...');
     final tokenData = await _client.refreshToken(
       accessToken: _currentToken!.accessToken,
       refreshToken: _currentToken!.refreshToken!,
     );
-
-    _logger.debug('📦 Token data received: expiresIn=${tokenData['expiresIn']} seconds');
-
-    // Update token
-    _currentToken = CertiliaToken(
-      accessToken: tokenData['accessToken'],
-      refreshToken: tokenData['refreshToken'] ?? _currentToken!.refreshToken,
-      idToken: tokenData['idToken'],
-      expiresAt: tokenData['expiresIn'] != null
-          ? DateTime.now().add(Duration(seconds: tokenData['expiresIn']))
-          : null,
-      tokenType: tokenData['tokenType'] ?? 'Bearer',
+    _currentToken = _tokenFromResponse(
+      tokenData,
+      fallbackRefreshToken: _currentToken!.refreshToken,
     );
-
-    _logger.debug('✨ New token created with expiry: ${_currentToken!.expiresAt}');
-    _logger.debug('🔑 New access token (first 20): ${_currentToken!.accessToken.substring(0, 20)}...');
-
-    // Save updated token
-    await _saveToken(_currentToken!);
-    _logger.log('💾 Token saved to secure storage');
+    await _tokenStorage.saveToken(_currentToken!);
+    _logger.log('Token saved to secure storage');
   }
 
-  /// Get extended user info
   Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
-    if (_currentToken == null) {
-      await _loadToken();
-    }
-
-    if (_currentToken == null || _currentToken!.isExpired) {
-      return null;
-    }
+    _currentToken ??= await _tokenStorage.loadToken();
+    if (_currentToken == null || _currentToken!.isExpired) return null;
 
     try {
       return await _client.getExtendedUserInfo(_currentToken!.accessToken);
     } catch (e) {
-      // Try refresh on auth error
-      if (e.toString().contains('401') || e.toString().contains('expired')) {
+      // Refresh once on 401/expired errors, then retry.
+      final msg = e.toString();
+      if (msg.contains('401') || msg.contains('expired')) {
         if (_currentToken!.refreshToken != null) {
           try {
             await refreshToken();
-            return await _client.getExtendedUserInfo(_currentToken!.accessToken);
-          } catch (refreshError) {
+            return await _client
+                .getExtendedUserInfo(_currentToken!.accessToken);
+          } catch (_) {
             await logout();
             return null;
           }
@@ -205,148 +147,99 @@ class CertiliaStatefulWrapper {
     }
   }
 
-  /// Logout
   Future<void> logout() async {
-    // Clear memory state
     _currentToken = null;
     _currentUser = null;
-
-    // Clear storage
-    await _storage.delete(key: _tokenStorageKey);
-    await _storage.delete(key: _userStorageKey);
-  }
-
-  // Storage helpers
-  Future<void> _saveToken(CertiliaToken token) async {
-    try {
-      final tokenJson = jsonEncode(token.toJson());
-      await _storage.write(key: _tokenStorageKey, value: tokenJson);
-    } catch (e) {
-      // Silent fail
-    }
-  }
-
-  Future<void> _loadToken() async {
-    try {
-      final tokenJson = await _storage.read(key: _tokenStorageKey);
-      if (tokenJson != null) {
-        final tokenData = jsonDecode(tokenJson) as Map<String, dynamic>;
-        _currentToken = CertiliaToken.fromJson(tokenData);
-      }
-    } catch (e) {
-      // Silent fail
-    }
+    await _tokenStorage.deleteToken();
+    await _userStorage.delete(key: _userStorageKey);
   }
 
   Future<void> _saveUser(CertiliaUser user) async {
     try {
-      final userJson = jsonEncode(user.toJson());
-      await _storage.write(key: _userStorageKey, value: userJson);
-    } catch (e) {
-      // Silent fail
+      await _userStorage.write(
+        key: _userStorageKey,
+        value: jsonEncode(user.toJson()),
+      );
+    } catch (_) {
+      // Silent — best-effort cache.
     }
   }
 
-  Future<void> _loadUser() async {
+  Future<CertiliaUser?> _loadUser() async {
     try {
-      final userJson = await _storage.read(key: _userStorageKey);
-      if (userJson != null) {
-        final userData = jsonDecode(userJson) as Map<String, dynamic>;
-        _currentUser = CertiliaUser.fromJson(userData);
-      }
-    } catch (e) {
-      // Silent fail
+      final userJson = await _userStorage.read(key: _userStorageKey);
+      if (userJson == null) return null;
+      return CertiliaUser.fromJson(
+        jsonDecode(userJson) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return null;
     }
   }
 
-  // Getters for tokens
   String? get currentAccessToken => _currentToken?.accessToken;
   String? get currentRefreshToken => _currentToken?.refreshToken;
   String? get currentIdToken => _currentToken?.idToken;
   DateTime? get tokenExpiry => _currentToken?.expiresAt;
 
-  /// Dispose
-  void dispose() {
-    _client.dispose();
+  void dispose() => _client.dispose();
+
+  CertiliaToken _tokenFromResponse(
+    Map<String, dynamic> data, {
+    String? fallbackRefreshToken,
+  }) {
+    final expiresIn = data['expiresIn'];
+    return CertiliaToken(
+      accessToken: data['accessToken'] as String,
+      refreshToken:
+          (data['refreshToken'] as String?) ?? fallbackRefreshToken,
+      idToken: data['idToken'] as String?,
+      expiresAt: expiresIn != null
+          ? DateTime.now().add(Duration(seconds: expiresIn as int))
+          : null,
+      tokenType: (data['tokenType'] as String?) ?? 'Bearer',
+    );
   }
 
-  // ===== STATIC METHODS FOR ACCESSING STORED TOKENS =====
+  // ===== Static helpers for reading stored tokens without an instance =====
 
-  /// Get the last stored access token (static method)
+  static final TokenStorageService _staticTokenStorage =
+      TokenStorageService();
+
   static Future<String?> getStoredAccessToken() async {
-    try {
-      final tokenJson = await _sharedStorage.read(key: _tokenStorageKey);
-      if (tokenJson != null) {
-        final tokenData = jsonDecode(tokenJson) as Map<String, dynamic>;
-        final token = CertiliaToken.fromJson(tokenData);
-        // Check if token is expired
-        if (!token.isExpired) {
-          return token.accessToken;
-        }
-      }
-    } catch (e) {
-      // Silent fail
-    }
-    return null;
+    final token = await _staticTokenStorage.loadToken();
+    return (token != null && !token.isExpired) ? token.accessToken : null;
   }
 
-  /// Get the last stored refresh token (static method)
   static Future<String?> getStoredRefreshToken() async {
-    try {
-      final tokenJson = await _sharedStorage.read(key: _tokenStorageKey);
-      if (tokenJson != null) {
-        final tokenData = jsonDecode(tokenJson) as Map<String, dynamic>;
-        final token = CertiliaToken.fromJson(tokenData);
-        return token.refreshToken;
-      }
-    } catch (e) {
-      // Silent fail
-    }
-    return null;
+    final token = await _staticTokenStorage.loadToken();
+    return token?.refreshToken;
   }
 
-  /// Get the stored token expiry time (static method)
   static Future<DateTime?> getStoredTokenExpiry() async {
-    try {
-      final tokenJson = await _sharedStorage.read(key: _tokenStorageKey);
-      if (tokenJson != null) {
-        final tokenData = jsonDecode(tokenJson) as Map<String, dynamic>;
-        final token = CertiliaToken.fromJson(tokenData);
-        return token.expiresAt;
-      }
-    } catch (e) {
-      // Silent fail
-    }
-    return null;
+    final token = await _staticTokenStorage.loadToken();
+    return token?.expiresAt;
   }
 
-  /// Get the last stored user (static method)
   static Future<CertiliaUser?> getStoredUser() async {
     try {
       final userJson = await _sharedStorage.read(key: _userStorageKey);
-      if (userJson != null) {
-        final userData = jsonDecode(userJson) as Map<String, dynamic>;
-        return CertiliaUser.fromJson(userData);
-      }
-    } catch (e) {
-      // Silent fail
+      if (userJson == null) return null;
+      return CertiliaUser.fromJson(
+        jsonDecode(userJson) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return null;
     }
-    return null;
   }
 
-  /// Check if there's a valid stored token (static method)
-  static Future<bool> hasValidStoredToken() async {
-    final token = await getStoredAccessToken();
-    return token != null;
-  }
+  static Future<bool> hasValidStoredToken() async =>
+      (await getStoredAccessToken()) != null;
 
-  /// Clear all stored data (static method)
   static Future<void> clearStoredData() async {
+    await _staticTokenStorage.deleteToken();
     try {
-      await _sharedStorage.delete(key: _tokenStorageKey);
       await _sharedStorage.delete(key: _userStorageKey);
-    } catch (e) {
-      // Silent fail
-    }
+    } catch (_) {}
   }
 }
