@@ -238,6 +238,79 @@ final config = CertiliaConfig(
 );
 ```
 
+## Use in another Flutter app
+
+The full Phase-5 rewrite of this README is pending; large parts of the
+sections above describe the deprecated 0.1.x direct-integration paths.
+For 0.2.0+ the only supported architecture is proxy-only — the steps
+below get you running against an existing `certilia-server`.
+
+### 1. Add the dependency
+
+Until 0.2.0 is published to pub.dev, depend on the repo directly:
+
+```yaml
+dependencies:
+  flutter_certilia:
+    git:
+      url: https://github.com/stepanic/flutter_certilia.git
+      ref: main
+```
+
+Or use a `path:` dep for local development:
+
+```yaml
+dependencies:
+  flutter_certilia:
+    path: ../flutter_certilia
+```
+
+### 2. Point at your proxy server
+
+The Flutter SDK only needs the proxy URL — credentials live on the
+server. In your app:
+
+```dart
+import 'package:flutter_certilia/flutter_certilia.dart';
+
+final certilia = await CertiliaSDK.initialize(
+  serverUrl: const String.fromEnvironment(
+    'CERTILIA_SERVER_URL',
+    defaultValue: 'https://your-proxy.example',
+  ),
+  scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
+  enableLogging: true,
+);
+```
+
+Override the URL per build:
+
+```bash
+flutter run --dart-define=CERTILIA_SERVER_URL=https://your-proxy.example
+```
+
+### 3. Drive the auth flow
+
+The returned `certilia` object exposes the same surface on all
+platforms (the runtime type differs between web and mobile, but the
+methods you'll call do not):
+
+```dart
+final user = await certilia.authenticate(context);   // opens popup / WebView
+final isAuthed = await certilia.checkAuthenticationStatus();
+final extended = await certilia.getExtendedUserInfo();
+await certilia.refreshToken();
+await certilia.logout();
+```
+
+### 4. Build your own UI
+
+`flutter_certilia` ships API-only — no opinionated widgets, no theme.
+The `example/lib/certilia_auth/` directory in this repo contains a
+working reference UI (login button, authenticated view, user-info
+cards, theme toggle) that you can copy-paste and adapt to your app's
+design system.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

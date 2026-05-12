@@ -2,14 +2,22 @@ import 'package:flutter/material.dart';
 import 'certilia_auth/certilia_auth_widget.dart';
 import 'certilia_auth/theme/certilia_theme.dart';
 
+/// URL of the certilia-server proxy. Override at build time:
+///   flutter run -d chrome --dart-define=CERTILIA_SERVER_URL=https://your.proxy.example
+///
+/// The default points at the dev ngrok tunnel used during development.
+const _defaultServerUrl = 'https://uniformly-credible-opossum.ngrok-free.app';
+const _serverUrl = String.fromEnvironment(
+  'CERTILIA_SERVER_URL',
+  defaultValue: _defaultServerUrl,
+);
+
+const _scopes = ['openid', 'profile', 'eid', 'email', 'offline_access'];
+
 void main() {
   runApp(const MyApp());
 }
 
-/// Main application widget
-///
-/// This is a minimal wrapper that provides theme management
-/// and hosts the standalone CertiliaAuthWidget
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -18,7 +26,6 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // Default to dark theme
   ThemeMode _themeMode = ThemeMode.dark;
 
   void _toggleTheme() {
@@ -27,6 +34,15 @@ class _MyAppState extends State<MyApp> {
           ? ThemeMode.dark
           : ThemeMode.light;
     });
+  }
+
+  CertiliaAuthWidget _buildAuthWidget() {
+    return CertiliaAuthWidget(
+      serverUrl: _serverUrl,
+      scopes: _scopes,
+      enableLogging: true,
+      onThemeToggle: _toggleTheme,
+    );
   }
 
   @override
@@ -38,27 +54,10 @@ class _MyAppState extends State<MyApp> {
       themeMode: _themeMode,
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
-      routes: {
-        '/': (context) => CertiliaAuthWidget(
-          // Configuration - Only server URL is needed with proxy architecture
-          serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
-          scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
-          enableLogging: true, // Set to true for development
-          // Theme toggle callback
-          onThemeToggle: _toggleTheme,
-        ),
-      },
-      // Fallback route to ensure Navigator always has something
-      onUnknownRoute: (settings) {
-        return MaterialPageRoute(
-          builder: (context) => CertiliaAuthWidget(
-            serverUrl: 'https://uniformly-credible-opossum.ngrok-free.app',
-            scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
-            enableLogging: true,
-            onThemeToggle: _toggleTheme,
-          ),
-        );
-      },
+      routes: {'/': (context) => _buildAuthWidget()},
+      onUnknownRoute: (settings) => MaterialPageRoute(
+        builder: (context) => _buildAuthWidget(),
+      ),
     );
   }
 }
