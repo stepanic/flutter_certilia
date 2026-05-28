@@ -1,7 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 import 'dart:async';
 // ignore: deprecated_member_use
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 
 import 'package:flutter/material.dart';
 
@@ -129,16 +129,15 @@ class CertiliaWebClient {
   }) async {
     final completer = Completer<String?>();
 
-    final left = (html.window.screen!.width! - _popupWidth) ~/ 2;
-    final top = (html.window.screen!.height! - _popupHeight) ~/ 2;
+    final left = (web.window.screen.width - _popupWidth) ~/ 2;
+    final top = (web.window.screen.height - _popupHeight) ~/ 2;
 
     _logger.log('Opening auth popup, polling id: $pollingId');
-    final popup = html.window.open(
+    final popup = web.window.open(
       authorizationUrl,
       'certilia_auth',
       'width=$_popupWidth,height=$_popupHeight,left=$left,top=$top',
     );
-    // ignore: unnecessary_null_comparison
     if (popup == null) {
       throw const CertiliaAuthenticationException(
         message: 'Popup blocked. Allow popups for this site and try again.',
@@ -202,7 +201,7 @@ class CertiliaWebClient {
     });
 
     popupCheckTimer = Timer.periodic(_popupCheckInterval, (timer) {
-      if (popup.closed ?? false) {
+      if (popup.closed) {
         timer.cancel();
         // Give polling one more window — server callback may still be in flight.
         Timer(const Duration(seconds: 3), () {
