@@ -5,8 +5,13 @@ import 'models/certilia_config.dart';
 
 // Platform-specific factory: picks the web popup client on web, the
 // WebView-based stateful wrapper on mobile/desktop.
+// NB: gate on dart.library.js_interop (NE dart.library.html) — html je
+// dostupan samo u dart2js, dok js_interop postoji i u dart2js i u dart2wasm.
+// Pod --wasm build-om dart.library.html je false pa bi se birao non-web stub
+// (createWebClient baca UnsupportedError). Web client koristi package:web pa
+// je wasm-kompatibilan.
 import 'certilia_sdk_factory.dart'
-    if (dart.library.html) 'certilia_sdk_factory_web.dart';
+    if (dart.library.js_interop) 'certilia_sdk_factory_web.dart';
 
 /// Entry point for the Flutter Certilia SDK.
 ///
