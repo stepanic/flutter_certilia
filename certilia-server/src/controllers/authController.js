@@ -192,10 +192,11 @@ export const handleCallback = async (req, res, next) => {
     }
 
     // Build response data
+    const branding = getBranding();
     const templateData = {
       success: true,
-      title: 'Authentication Successful',
-      message: 'You can close this window and return to the app.',
+      title: branding.brandSuccessTitle,
+      message: branding.brandSuccessMessage,
       icon: 'OK',
       iconClass: 'success',
       code: code || '',

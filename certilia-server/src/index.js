@@ -30,6 +30,9 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       connectSrc: ["'self'", "*"],
+      // Brand logo (BRAND_LOGO_URL) je na drugom originu (npr. cdn.*) →
+      // bez img-src bi default-src 'self' blokirao cross-origin sliku.
+      imgSrc: ["'self'", 'https:', 'data:'],
     },
   },
 }));

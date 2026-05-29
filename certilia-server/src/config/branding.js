@@ -17,6 +17,10 @@ const DEFAULTS = {
   brandErrorColor: '#ef4444',
   brandTextColor: '#1f2937',
   brandMutedColor: '#6b7280',
+  // Tekstovi (lokalizacija / brand glas). Default EN; konzument može HR.
+  brandSuccessTitle: 'Authentication Successful',
+  brandSuccessMessage: 'You can close this window and return to the app.',
+  brandCloseButton: 'Close Window',
 };
 
 const ENV_MAP = {
@@ -31,6 +35,9 @@ const ENV_MAP = {
   brandErrorColor: 'BRAND_ERROR_COLOR',
   brandTextColor: 'BRAND_TEXT_COLOR',
   brandMutedColor: 'BRAND_MUTED_COLOR',
+  brandSuccessTitle: 'BRAND_SUCCESS_TITLE',
+  brandSuccessMessage: 'BRAND_SUCCESS_MESSAGE',
+  brandCloseButton: 'BRAND_CLOSE_BUTTON',
 };
 
 export function getBranding() {
