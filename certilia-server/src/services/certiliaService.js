@@ -89,6 +89,12 @@ class CertiliaService {
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
       prompt: 'login',
+      // Eksplicitno zatraži OIB (`pin`) U ID TOKENU. eid scope ga inače vraća
+      // samo preko userinfo endpointa, koji u Certilia produkciji traži token
+      // binding (ne radi) — pa OIB nikad ne stigne do bridgea koji čita
+      // claimove iz verificiranog id_tokena. claims_parameter_supported=true,
+      // `pin` je u claims_supported.
+      claims: JSON.stringify({ id_token: { pin: { essential: true } } }),
     });
 
     const authUrl = `${config.certilia.baseUrl}${config.certilia.authEndpoint}?${params.toString()}`;
