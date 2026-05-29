@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js';
 import healthRoutes from './routes/health.js';
 import userRoutes from './routes/userRoutes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { VERSION } from './utils/version.js';
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -108,7 +109,7 @@ app.use('/api/user', userRoutes);
 app.get('/', (req, res) => {
   res.json({
     name: 'Certilia OAuth Server',
-    version: '1.0.0',
+    version: VERSION,
     endpoints: {
       health: '/api/health',
       auth: {
