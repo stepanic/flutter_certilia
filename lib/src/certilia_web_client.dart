@@ -200,18 +200,36 @@ class CertiliaWebClient {
       }
     });
 
+    // COOP gotcha: pod `Cross-Origin-Opener-Policy: same-origin` (nužan za
+    // wasm crossOriginIsolated / skwasm threading) browser PRESIJECA
+    // opener→popup referencu za cross-origin popupe (Certilia/IDP) → `popup.closed`
+    // čita `true` odmah iako popup radi. Zato popup.closed koristimo kao signal
+    // otkazivanja SAMO ako smo popup prvo vidjeli otvoren; inače se oslanjamo
+    // isključivo na polling (+ timeout), koji je izvor istine jer hita proxy
+    // neovisno o COOP-u. Bez ovoga svaki cross-origin popup login lažno otkaže
+    // nakon ~4s (radi lokalno gdje COOP nije postavljen, puca u produkciji).
+    var sawPopupOpen = false;
     popupCheckTimer = Timer.periodic(_popupCheckInterval, (timer) {
-      if (popup.closed) {
-        timer.cancel();
-        // Give polling one more window — server callback may still be in flight.
-        Timer(const Duration(seconds: 3), () {
-          if (!completer.isCompleted && active) {
-            _logger.log('Popup closed without polling result');
-            cleanup();
-            completer.complete(null);
-          }
-        });
+      if (!popup.closed) {
+        sawPopupOpen = true;
+        return;
       }
+      if (!sawPopupOpen) {
+        _logger.log('popup.closed=true bez viđenog otvaranja — COOP-severed '
+            'referenca; oslanjam se na polling');
+        timer.cancel();
+        return;
+      }
+      // Popup je stvarno bio otvoren pa zatvoren → korisnik je odustao.
+      timer.cancel();
+      // Give polling one more window — server callback may still be in flight.
+      Timer(const Duration(seconds: 3), () {
+        if (!completer.isCompleted && active) {
+          _logger.log('Popup closed without polling result');
+          cleanup();
+          completer.complete(null);
+        }
+      });
     });
 
     return completer.future;
