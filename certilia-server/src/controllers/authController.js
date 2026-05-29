@@ -6,6 +6,7 @@ import { convertKeysToSnakeCase } from '../utils/caseConverter.js';
 import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, generateState, generateNonce } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
 import { AuthenticationError, ValidationError } from '../utils/errors.js';
+import { getBranding } from '../config/branding.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -24,7 +25,9 @@ const callbackTemplate = readFileSync(
  */
 function renderCallbackTemplate(data) {
   let html = callbackTemplate;
-  
+  // Branding (env-driven) ide u svaki render; data ne sadrži brand* ključeve.
+  data = { ...getBranding(), ...data };
+
   // Function to find matching endif for a given if position
   function findMatchingEndIf(str, startPos) {
     let depth = 1;

@@ -1,6 +1,6 @@
 {
   "name": "certilia-server",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Node.js middleware server for Certilia OAuth2 integration",
   "main": "src/index.js",
   "type": "module",

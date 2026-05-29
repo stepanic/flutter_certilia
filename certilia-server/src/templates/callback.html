@@ -12,17 +12,17 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: #f5f7fa;
+            font-family: {{brandFontFamily}};
+            background-color: {{brandBgColor}};
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
-            background: white;
+            background: {{brandCardColor}};
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             padding: 40px;
@@ -30,30 +30,48 @@
             width: 100%;
             text-align: center;
         }
-        
+
+        .brand {
+            margin-bottom: 24px;
+        }
+
+        .brand-logo {
+            max-height: 48px;
+            max-width: 70%;
+            object-fit: contain;
+        }
+
+        .brand-name {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: {{brandPrimaryColor}};
+            margin-top: 8px;
+        }
+
         .icon {
             font-size: 64px;
             margin-bottom: 20px;
         }
-        
+
         .icon.success {
-            color: #10b981;
+            color: {{brandSuccessColor}};
         }
-        
+
         .icon.error {
-            color: #ef4444;
+            color: {{brandErrorColor}};
         }
-        
+
         h1 {
             font-size: 24px;
             font-weight: 600;
-            color: #1f2937;
+            color: {{brandTextColor}};
             margin-bottom: 12px;
         }
-        
+
         p {
             font-size: 16px;
-            color: #6b7280;
+            color: {{brandMutedColor}};
             line-height: 1.5;
             margin-bottom: 24px;
         }
@@ -83,7 +101,7 @@
         
         .button {
             display: inline-block;
-            background-color: #3b82f6;
+            background-color: {{brandPrimaryColor}};
             color: white;
             padding: 12px 24px;
             border-radius: 8px;
@@ -91,9 +109,9 @@
             font-weight: 500;
             transition: background-color 0.2s;
         }
-        
+
         .button:hover {
-            background-color: #2563eb;
+            background-color: {{brandPrimaryHover}};
         }
         
         .close-button {
@@ -138,6 +156,14 @@
 </head>
 <body>
     <div class="container">
+        {{#if brandLogoUrl}}
+        <div class="brand">
+            <img class="brand-logo" src="{{brandLogoUrl}}" alt="{{brandName}}">
+        </div>
+        {{/if}}
+        {{#if brandName}}
+        <div class="brand-name">{{brandName}}</div>
+        {{/if}}
         <div class="icon {{iconClass}}">{{icon}}</div>
         <h1>{{title}}</h1>
         <p>{{message}}</p>
