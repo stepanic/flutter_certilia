@@ -423,6 +423,10 @@ export const exchangeCode = async (req, res, next) => {
 
     res.json({
       ...tokens,
+      // Originalni Certilia OIDC id_token (camelCase za SDK `_tokenFromResponse`).
+      // Klijent ga šalje edge bridgeu koji ga verificira protiv Certilia JWKS.
+      // NIJE u serverovom JWT-u (size issue), ali se vraća kao zasebno polje.
+      idToken: certiliaTokens.id_token,
       user: {
         sub: userInfo.sub,
         first_name: userInfo.firstName || userInfo.given_name,
