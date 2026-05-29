@@ -18,10 +18,15 @@ services:
       dockerfile: Dockerfile
     image: certilia-server:${TAG:-latest}
     restart: unless-stopped
-    # Coolify (and most reverse-proxy setups) terminate TLS and route to
-    # the container on this port. The app reads PORT at startup.
-    ports:
-      - "${PORT:-8080}:8080"
+    # Container sluša na 8080 (PORT env, HOST 0.0.0.0). Reverse-proxy (Coolify
+    # Traefik / Cloudflare Tunnel) ruta na ovaj port PREKO Docker mreže — NE
+    # treba (ni se smije forsirati) host port binding. `expose` umjesto `ports`
+    # izbjegava "Bind for 0.0.0.0:8080 failed: port is already allocated" kad je
+    # host port zauzet drugim servisom. Za lokalni dev host-pristup (curl
+    # localhost:8080) koristi docker-compose.override.yml (auto-merge na
+    # `docker compose up`; Coolify ga ignorira jer deploya s eksplicitnim -f).
+    expose:
+      - "8080"
     environment:
       # Server
       NODE_ENV: ${NODE_ENV:-production}
