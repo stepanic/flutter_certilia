@@ -92,11 +92,12 @@ class CertiliaService {
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
       prompt: 'login',
-      // Eksplicitno zatraži OIB (`pin`) U ID TOKENU. eid scope ga inače vraća
-      // samo preko userinfo endpointa, koji u Certilia produkciji traži token
-      // binding (ne radi), pa OIB nikad ne stigne do bridgea koji čita
-      // claimove iz verificiranog id_tokena. claims_parameter_supported=true,
-      // `pin` je u claims_supported.
+      // Traži OIB (`pin`) u ID tokenu. Scope eid ga inače daje samo preko
+      // userinfo endpointa, a taj u Certilijinoj produkciji odbija pozive sa
+      // servera (access token je vezan za `atbv` cookie u korisnikovom
+      // browseru). Discovery dokument navodi claims_parameter_supported=true i
+      // `pin` u claims_supported. Portal klijenti ipak ne dobiju `pin`:
+      // Certilia im šalje OIB kao `sub`.
       claims: JSON.stringify({ id_token: { pin: { essential: true } } }),
     });
 
@@ -206,12 +207,15 @@ class CertiliaService {
   /**
    * Get user information
    * @param {string} accessToken - Access token
-   * @param {string} idToken - ID token (optional, may be required for token binding)
+   * @param {string} idToken - ID token (optional); when given, two more request
+   *   forms are tried
    * @returns {Promise<Object>} User information
    */
   async getUserInfo(accessToken, idToken = null) {
     try {
-      // Try multiple methods to satisfy token binding requirements
+      // Three request forms for the userinfo endpoint. In production none of
+      // them succeeds: Certilia binds the access token to the `atbv` cookie it
+      // set in the user's browser, and this server does not have that cookie.
       let response;
       let lastError;
 
@@ -235,7 +239,7 @@ class CertiliaService {
 
       // If we have id_token, try additional methods
       if (idToken) {
-        // Method 2: POST with access_token in body (simpler approach)
+        // Method 2: POST with access_token in body
         try {
           logger.info('Trying POST with access_token in body');
           const params = new URLSearchParams({
@@ -289,7 +293,8 @@ class CertiliaService {
           logger.warn('UserInfo endpoint requires token binding which is not supported in production');
           logger.info('Falling back to ID token claims');
 
-          // Return a special error that signals to use ID token
+          // Callers recognize this message and read the claims from the ID
+          // token instead.
           const fallbackError = new Error('USE_ID_TOKEN_FALLBACK');
           fallbackError.originalError = lastError;
           throw fallbackError;
@@ -348,7 +353,7 @@ class CertiliaService {
         }
       );
     } catch (error) {
-      // Token revocation failures are often not critical
+      // A failed revocation is logged, not thrown: the token expires anyway.
       logger.warn('Failed to revoke token', {
         tokenType,
         error: error.message,

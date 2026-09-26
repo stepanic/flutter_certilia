@@ -7,7 +7,7 @@ import '../models/certilia_user.dart';
 ///
 /// [ProxyAuthService] talks to certilia-server, which keeps the client
 /// secret on a server. [DirectAuthService] talks to Certilia itself with a
-/// secret shipped in the app (see [CertiliaDirectClient]).
+/// secret compiled into the app (see [CertiliaDirectClient]).
 ///
 /// Token bundles use the proxy's format: `accessToken`, `refreshToken`,
 /// `idToken`, `expiresIn`, `tokenType`, and after an exchange `user`.

@@ -1,6 +1,6 @@
 # ====================================================================
-# Multi-stage Dockerfile for Google Cloud Run
-# Optimized for production deployment
+# Two-stage build for Google Cloud Run (deploy-cloud-run.sh) and for
+# docker compose / Coolify (docker-compose.yml)
 # ====================================================================
 
 # Stage 1: Dependencies
@@ -51,7 +51,7 @@ ENV NODE_ENV=production
 # Expose port (dynamic from Cloud Run)
 EXPOSE ${PORT}
 
-# Health check (optional, Cloud Run has its own)
+# Used by Docker and Coolify; Cloud Run runs its own health checks.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:${PORT}/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 

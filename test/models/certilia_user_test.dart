@@ -141,7 +141,8 @@ void main() {
       });
 
       expect(user1, equals(user2));
-      // Note: hashCode might differ due to Map implementation details
+      // Equal users can have different hash codes: hashCode includes
+      // raw.hashCode, and a Map's hashCode is its identity.
       // expect(user1.hashCode, equals(user2.hashCode));
       expect(user1, isNot(equals(user3)));
     });

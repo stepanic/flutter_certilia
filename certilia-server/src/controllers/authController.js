@@ -27,10 +27,11 @@ const callbackTemplate = readFileSync(
  */
 function renderCallbackTemplate(data) {
   let html = callbackTemplate;
-  // Branding (env-driven) ide u svaki render; data ne sadrži brand* ključeve.
+  // Branding iz env varijabli ulazi u svaki render; data ne sadrži brand* ključeve.
   data = { ...getBranding(), ...data };
 
-  // Function to find matching endif for a given if position
+  // Position of the {{/if}} that closes the {{#if}} opened just before
+  // startPos, or -1.
   function findMatchingEndIf(str, startPos) {
     let depth = 1;
     let pos = startPos;
@@ -90,14 +91,13 @@ function renderCallbackTemplate(data) {
 }
 
 /**
- * Initialize OAuth authorization flow
- * Mobile app calls this to get authorization URL
+ * Initialize OAuth authorization flow.
+ * The SDK calls this on every platform to get the authorization URL.
  */
 export const initializeAuth = async (req, res, next) => {
   try {
     const { redirect_uri, state: clientState } = req.query;
 
-    // Generate OAuth parameters
     const state = clientState || generateState();
     const nonce = generateNonce();
     const codeVerifier = generatePKCEVerifier();
@@ -107,7 +107,6 @@ export const initializeAuth = async (req, res, next) => {
     // decides which client this login uses.
     const client = resolveClientByRedirectUri(config.certilia.clients, redirect_uri);
 
-    // Create session to store OAuth parameters
     const sessionId = sessionService.createSession({
       state,
       nonce,
@@ -117,7 +116,6 @@ export const initializeAuth = async (req, res, next) => {
       createdAt: new Date().toISOString(),
     });
 
-    // Build authorization URL
     const authorizationUrl = certiliaService.buildAuthorizationUrl({
       state,
       nonce,
@@ -139,15 +137,16 @@ export const initializeAuth = async (req, res, next) => {
 };
 
 /**
- * Handle OAuth callback from Certilia
- * This is called by Certilia after user authentication
+ * Handle OAuth callback from Certilia.
+ * Certilia redirects the browser here after login in the flows that use the
+ * proxy's callback (the WebView and the web popup with polling).
  */
 export const handleCallback = async (req, res, next) => {
   try {
     const { code, state } = req.query;
     const { error, error_description } = req.query;
 
-    // Enhanced debug logging
+    // Debug logging
     logger.info('===== OAUTH CALLBACK RECEIVED =====');
     logger.info('Full query params:', req.query);
     logger.info('Code:', code || 'null');
@@ -157,7 +156,6 @@ export const handleCallback = async (req, res, next) => {
     logger.info('Request headers:', req.headers);
     logger.info('Request URL:', req.url);
 
-    // Check for OAuth errors
     if (error) {
       logger.warn('OAuth callback error', { error, error_description });
       
@@ -199,7 +197,6 @@ export const handleCallback = async (req, res, next) => {
       throw new ValidationError('Missing required parameters');
     }
 
-    // Build response data
     const branding = getBranding();
     const templateData = {
       success: true,
@@ -222,7 +219,7 @@ export const handleCallback = async (req, res, next) => {
 
     logger.info('Rendering success callback template with data:', templateData);
     
-    // Update polling session if exists
+    // The web popup flow polls for this result.
     const updated = pollingSessionService.updateSessionByState(state, {
       code,
       state,
@@ -233,7 +230,6 @@ export const handleCallback = async (req, res, next) => {
       logger.info('Updated polling session for state:', state);
     }
 
-    // For all authentication callbacks, return the template
     res.send(renderCallbackTemplate(templateData));
   } catch (error) {
     next(error);
@@ -241,25 +237,22 @@ export const handleCallback = async (req, res, next) => {
 };
 
 /**
- * Exchange authorization code for tokens
- * Mobile app calls this after parsing the callback
+ * Exchange authorization code for tokens.
+ * The SDK calls this with the code from the callback, on every platform.
  */
 export const exchangeCode = async (req, res, next) => {
   try {
     const { code, state, session_id } = req.body;
 
-    // Retrieve session
     const session = sessionService.getSession(session_id);
     if (!session) {
       throw new AuthenticationError('Invalid or expired session');
     }
 
-    // Verify state
     if (session.state !== state) {
       throw new AuthenticationError('Invalid state parameter');
     }
 
-    // Exchange code for tokens
     const tokenResponse = await certiliaService.exchangeCodeForTokens({
       code,
       codeVerifier: session.codeVerifier,
@@ -284,7 +277,6 @@ export const exchangeCode = async (req, res, next) => {
       expires_in: tokenResponse.expires_in,
     };
 
-    // First decode ID token to get claims
     let idTokenClaims = {};
     let thumbnail = null; // Store thumbnail separately to add to response later
     if (tokenResponse.id_token) {
@@ -331,7 +323,9 @@ export const exchangeCode = async (req, res, next) => {
     const skipUserInfo = process.env.SKIP_USERINFO_ENDPOINT === 'true';
 
     if (skipUserInfo) {
-      // Skip userinfo endpoint in production environments where it requires token binding
+      // Certilia's production userinfo endpoint only answers requests that carry
+      // the `atbv` token-binding cookie of the browser that logged in, so a call
+      // from this server always fails there.
       logger.info('Skipping userinfo endpoint, using ID token claims directly');
       if (idTokenClaims && idTokenClaims.sub) {
         userInfo = {
@@ -384,15 +378,12 @@ export const exchangeCode = async (req, res, next) => {
       }
     }
 
-    // Merge any additional ID token claims with user info
-    // (ID token was already decoded above)
-
-    // Generate our own JWT tokens with complete user data
-    // Don't include ID token in JWT to avoid header size issues
+    // The proxy's JWT carries Certilia's access and refresh tokens but not the
+    // ID token: that holds the user's photo (the thumbnail claim) and would
+    // make the Authorization header too large.
     const certiliaTokensForJWT = {
       access_token: certiliaTokens.access_token,
       refresh_token: certiliaTokens.refresh_token,
-      // Omit ID token completely to avoid JWT size issues
       expires_in: certiliaTokens.expires_in,
       token_type: certiliaTokens.token_type
     };
@@ -403,7 +394,7 @@ export const exchangeCode = async (req, res, next) => {
       ...idTokenClaims,
     };
 
-    // Convert all user data to snake_case for consistency
+    // The JWT carries all user data with snake_case keys.
     const snakeCaseUserInfo = convertKeysToSnakeCase(mergedUserInfo);
 
     // Add certilia tokens (already in snake_case)
@@ -425,7 +416,6 @@ export const exchangeCode = async (req, res, next) => {
 
     const tokens = tokenService.generateTokenPair(completeUserInfo);
 
-    // Clean up session
     sessionService.deleteSession(session_id);
 
     logger.info('Code exchanged successfully', {
@@ -436,9 +426,10 @@ export const exchangeCode = async (req, res, next) => {
 
     res.json({
       ...tokens,
-      // Originalni Certilia OIDC id_token (camelCase za SDK `_tokenFromResponse`).
-      // Klijent ga šalje edge bridgeu koji ga verificira protiv Certilia JWKS.
-      // NIJE u serverovom JWT-u (size issue), ali se vraća kao zasebno polje.
+      // Certilijin OIDC id_token, pod camelCase ključem koji čita SDK-ov
+      // `_tokenFromResponse`. Aplikacija ga može poslati svom backendu, koji ga
+      // provjerava prema Certilijinom JWKS-u. U JWT proxyja ne ulazi (vidi
+      // gore), pa se vraća kao zasebno polje.
       idToken: certiliaTokens.id_token,
       user: {
         sub: userInfo.sub,
@@ -469,8 +460,8 @@ export const refreshToken = async (req, res, next) => {
     // Verify and decode refresh token
     const decoded = tokenService.verifyToken(refresh_token, 'refresh');
 
-    // Prefer access_token from body; fall back to Authorization header for
-    // backward compatibility with older clients (pre-Phase-2B).
+    // Prefer access_token from the body; SDK versions before 0.2.0 send it in
+    // the Authorization header instead.
     let accessToken = bodyAccessToken;
     if (!accessToken) {
       accessToken = tokenService.extractTokenFromHeader(req.headers.authorization);
@@ -528,10 +519,9 @@ export const getCurrentUser = async (req, res, next) => {
  */
 export const logout = async (req, res, next) => {
   try {
-    // In a real app, you might want to:
-    // - Invalidate the refresh token
-    // - Add the access token to a blacklist
-    // - Clear any server-side sessions
+    // The proxy keeps no state for a login once the code is exchanged, and it
+    // does not revoke its JWTs, so logout only logs. The access and refresh
+    // tokens stay valid until they expire.
 
     logger.info('User logged out', { userId: req.userId });
 
@@ -544,7 +534,7 @@ export const logout = async (req, res, next) => {
 };
 
 /**
- * Start polling session for cross-origin authentication
+ * Start a polling session for the web popup flow without a callbackUrl.
  */
 export const startPolling = async (req, res, next) => {
   try {

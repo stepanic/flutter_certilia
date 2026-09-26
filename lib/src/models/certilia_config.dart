@@ -17,11 +17,13 @@ class CertiliaConfig {
   /// [callbackUrl].
   final CertiliaDirectClient? direct;
 
-  /// OAuth scopes the proxy should request. The proxy server is free to
-  /// override or extend this list.
+  /// OAuth scopes requested in direct mode. In proxy mode the SDK does not
+  /// send them; certilia-server requests the scopes in its own config.
   final List<String> scopes;
 
-  /// Prefer iOS ephemeral session (no shared cookies) where supported.
+  /// Asks for an ephemeral ASWebAuthenticationSession, which shares no
+  /// cookies with Safari. Used only by the system-browser flow on iOS and
+  /// macOS; see `CertiliaBrowserClient`.
   final bool preferEphemeralSession;
 
   /// Enable verbose SDK logging.
@@ -29,8 +31,9 @@ class CertiliaConfig {
 
   /// Where Certilia sends the browser after login, when the app receives
   /// the redirect itself. Certilia registers one callback URL per client,
-  /// so this must be exactly the callback of a client the proxy knows
-  /// (see `CERTILIA_CLIENTS` in certilia-server).
+  /// so this must be exactly the callback registered for the client in
+  /// use: a client the proxy knows (see `CERTILIA_CLIENTS` in
+  /// certilia-server), or [direct].
   ///
   /// - `null` (default): Certilia redirects to the proxy's own
   ///   `/api/auth/callback`. Mobile uses an in-app WebView that watches for
@@ -40,7 +43,7 @@ class CertiliaConfig {
   ///   ASWebAuthenticationSession), which returns the redirect to the app.
   /// - Web, a page on the app's own origin (e.g. `https://app.example/certilia_callback.html`):
   ///   the login runs in a popup and that page reports the result to the
-  ///   app over BroadcastChannel; no polling.
+  ///   app over BroadcastChannel and localStorage; no polling.
   final String? callbackUrl;
 
   const CertiliaConfig({

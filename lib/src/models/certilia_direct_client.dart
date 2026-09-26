@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 ///
 /// Certilia only issues confidential clients: its token endpoint refuses a
 /// code exchange without the client secret. In direct mode that secret
-/// ships inside the app, where anyone can read it. What protects the login
+/// is compiled into the app, where anyone can read it. What protects the login
 /// is then the exact redirect match and PKCE: Certilia sends the
 /// authorization code only to the registered callback, and a code is
 /// useless without the PKCE verifier of the login that requested it. With
@@ -15,7 +15,7 @@ import 'package:flutter/foundation.dart';
 /// the device could also receive the redirect, so direct mode requires an
 /// https callback.
 ///
-/// Check Certilia's terms before shipping a client secret.
+/// Check Certilia's terms before putting a client secret in an app.
 @immutable
 class CertiliaDirectClient {
   final String clientId;

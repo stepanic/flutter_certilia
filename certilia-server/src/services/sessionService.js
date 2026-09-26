@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger.js';
 
-// In-memory session store (replace with Redis in production)
+// In-memory session store: sessions are lost on restart and not shared
+// between instances. config.redis is not used.
 class SessionService {
   constructor() {
     this.sessions = new Map();

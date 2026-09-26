@@ -19,9 +19,9 @@ import 'services/token_storage_service.dart';
 /// [CertiliaBrowserClient] when [CertiliaConfig.callbackUrl] is set,
 /// otherwise [CertiliaWebViewClient].
 ///
-/// Manages token + user persistence, refresh-on-expiry, and cached user
-/// state. Used on mobile/desktop targets; the web target's
-/// `CertiliaWebClient` is already stateful by necessity (popup polling).
+/// Stores the token and the user in secure storage, refreshes an expired
+/// token, and keeps the current user in memory. Used on mobile and desktop;
+/// on web, `CertiliaWebClient` keeps this state itself.
 class CertiliaStatefulWrapper {
   final CertiliaNativeClient _client;
   final TokenStorageService _tokenStorage;
@@ -31,9 +31,9 @@ class CertiliaStatefulWrapper {
   CertiliaToken? _currentToken;
   CertiliaUser? _currentUser;
 
-  /// Completes when the constructor's initial token + user load has finished.
-  /// Async-public methods await this so callers don't see a fresh-instance
-  /// "not authenticated" before storage has been consulted.
+  /// Completes when the constructor has loaded the saved token and user.
+  /// The public async methods await it, so a new instance does not report
+  /// "not authenticated" before storage has been read.
   late final Future<void> _ready;
 
   static const String _userStorageKey = 'certilia_user';
@@ -201,7 +201,8 @@ class CertiliaStatefulWrapper {
         value: jsonEncode(user.toJson()),
       );
     } catch (_) {
-      // Silent: best-effort cache.
+      // The saved user is only a cache: without it, the next start fetches
+      // the user again.
     }
   }
 
@@ -242,7 +243,7 @@ class CertiliaStatefulWrapper {
     );
   }
 
-  // ===== Static helpers for reading stored tokens without an instance =====
+  // Static helpers that read the saved token and user without an instance.
 
   static final TokenStorageService _staticTokenStorage =
       TokenStorageService();

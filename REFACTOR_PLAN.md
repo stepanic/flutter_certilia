@@ -9,7 +9,7 @@
 
 ## Kontekst: što je već isprobano i odbačeno
 
-Git historija pokazuje da postoji **samo jedan stabilan put** za Certilia OAuth na svim platformama: **server-side proxy + WebView (mobile) ili popup+polling (web)**.
+Izvorni plan je iz git historije zaključio da postoji **samo jedan stabilan put** za Certilia OAuth na svim platformama: **server-side proxy + WebView (mobile) ili popup+polling (web)**. Revizija ispod pokazuje da razlozi u ovoj tablici nisu točni.
 
 | Pristup | Status | Razlog odustanka |
 |---|---|---|
@@ -33,13 +33,13 @@ pozivima na `idp.certilia.com`:
 | Popup s `window.opener.postMessage` | Stoji: pod `Cross-Origin-Opener-Policy: same-origin` popup ima `window.opener === null`. Isti cilj (popup bez pollinga) postignut callback stranicom na originu aplikacije + BroadcastChannel/localStorage. |
 | WebView bez proxyja | Zabilježene greške bile su između aplikacije i ngroka, ne Certilije; WebView i danas izravno otvara Certiliju. "Bez proxyja" je nemoguće samo zbog client secreta. |
 
-**Posljedica:** Sav kod vezan uz prve četiri opcije je mrtav i može se izbrisati bez gubitka funkcionalnosti.
+**Posljedica za Fazu 0:** kod vezan uz prve četiri opcije nitko nije koristio, pa se mogao izbrisati bez gubitka funkcionalnosti. Browser i direct tok kasnije su napisani iznova (`CertiliaBrowserClient`, `DirectAuthService`).
 
 ---
 
 ## Analiza kvalitete (polazna točka)
 
-Pune ocjene po područjima (vidi pravo memory za detalje):
+Ocjene po područjima:
 
 | Područje | Ocjena | Glavni nalaz |
 |---|---|---|

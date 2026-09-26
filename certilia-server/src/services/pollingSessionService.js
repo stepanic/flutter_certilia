@@ -14,11 +14,11 @@ const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const SESSION_TTL = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Polling session service for cross-origin authentication
+ * Polling sessions for the web popup flow without a callbackUrl: the
+ * callback stores the code here and the SDK polls for it.
  */
 class PollingSessionService {
   constructor() {
-    // Start cleanup interval
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
     }, CLEANUP_INTERVAL);

@@ -24,8 +24,7 @@ export const authenticate = async (req, res, next) => {
 
     const decoded = tokenService.verifyToken(token, 'access');
 
-    // Attach user info to request
-    // Now all user data is at root level, not in nested 'user' object
+    // The JWT carries the user's claims at the top level.
     const { certilia_tokens, type, ...userData } = decoded;
     req.user = userData;  // All user data except certilia_tokens and type
     req.userId = decoded.sub;
@@ -53,7 +52,7 @@ export const optionalAuthenticate = async (req, res, next) => {
 
     if (token) {
       const decoded = tokenService.verifyToken(token, 'access');
-      // Now all user data is at root level, not in nested 'user' object
+      // The JWT carries the user's claims at the top level.
       const { certilia_tokens, type, ...userData } = decoded;
       req.user = userData;  // All user data except certilia_tokens and type
       req.userId = decoded.sub;

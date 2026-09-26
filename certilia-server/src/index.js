@@ -22,7 +22,8 @@ const app = express();
 // Trust proxy - required for ngrok and rate limiting with X-Forwarded-For
 app.set('trust proxy', true);
 
-// Security middleware with updated CSP for callback page
+// Security headers, with a CSP that allows the callback page's script and
+// images.
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -30,8 +31,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       connectSrc: ["'self'", "*"],
-      // Brand logo (BRAND_LOGO_URL) je na drugom originu (npr. cdn.*) →
-      // bez img-src bi default-src 'self' blokirao cross-origin sliku.
+      // Brand logo (BRAND_LOGO_URL) je na drugom originu (npr. cdn.*); bez
+      // img-src bi default-src 'self' blokirao tu sliku.
       imgSrc: ["'self'", 'https:', 'data:'],
     },
   },
@@ -66,7 +67,8 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
-  // Skip validation warnings - we know we're behind ngrok proxy
+  // Turns off express-rate-limit's startup checks, which warn about
+  // 'trust proxy' being true; the server runs behind ngrok or a reverse proxy.
   validate: false,
 });
 
@@ -78,7 +80,7 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
-// Also serve files from src/public (for callback.js)
+// src/public is not in the repo; callback.js is served from ../public above.
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Special handling for .well-known files (must be served with correct content-type)

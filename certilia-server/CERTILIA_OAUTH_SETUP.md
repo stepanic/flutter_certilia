@@ -1,6 +1,6 @@
 # Certilia OAuth2 Setup Guide
 
-Quick reference for setting up OAuth2 application in Certilia Dashboard.
+Settings for registering an OAuth2 application in the Certilia developer portal.
 
 ## Dashboard URLs
 
@@ -13,7 +13,10 @@ Quick reference for setting up OAuth2 application in Certilia Dashboard.
 - **Application Type**: Web Application
 - **Grant Types**: Authorization Code, Refresh Token
 - **Response Types**: code
-- **Redirect URI**: `https://your-domain.ngrok-free.app/api/auth/callback`
+- **Redirect URI**: `https://your-domain.ngrok-free.app/api/auth/callback`.
+  Certilia allows one redirect URI per client, so every other callback (a
+  mobile custom scheme, an App Link, a web callback page) needs a client of
+  its own; see `CERTILIA_CLIENTS` in [README.md](README.md).
 - **Scopes**: openid, profile, eid, email, offline_access
 - **Token Auth Method**: client_secret_post
 - **PKCE**: Required (S256)
@@ -22,6 +25,10 @@ Quick reference for setting up OAuth2 application in Certilia Dashboard.
 - **Access Token**: 3600 seconds (1 hour)
 - **Refresh Token**: 2592000 seconds (30 days)
 - **ID Token Algorithm**: RS256
+
+Certilia currently refuses refresh requests from portal clients
+(`invalid_grant`, "Persisted access token data not found"), whatever the
+refresh token lifetime.
 
 ## After Creation
 

@@ -146,8 +146,8 @@ class TokenService {
     try {
       const decoded = this.verifyToken(refreshToken, 'refresh');
       
-      // Generate new token pair with the same user info
-      // In a real app, you might want to fetch fresh user data
+      // The new pair carries only `sub`: the refresh token holds no other
+      // user data.
       const newTokenPair = this.generateTokenPair({
         sub: decoded.sub,
       });

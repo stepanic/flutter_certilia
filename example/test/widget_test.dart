@@ -189,7 +189,6 @@ void main() {
     });
   });
 
-  // OIB validation tests removed as OIBValidator is not exported
 
   group('CertiliaUser Model Tests', () {
     test('User creation with all fields', () {

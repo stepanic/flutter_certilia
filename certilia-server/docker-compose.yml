@@ -19,8 +19,8 @@ services:
     image: certilia-server:${TAG:-latest}
     restart: unless-stopped
     # Container sluša na 8080 (PORT env, HOST 0.0.0.0). Reverse-proxy (Coolify
-    # Traefik / Cloudflare Tunnel) ruta na ovaj port PREKO Docker mreže, pa NE
-    # treba (ni se smije forsirati) host port binding. `expose` umjesto `ports`
+    # Traefik / Cloudflare Tunnel) ruta na ovaj port preko Docker mreže, pa host
+    # port binding ne treba i ne smije se forsirati. `expose` umjesto `ports`
     # izbjegava "Bind for 0.0.0.0:8080 failed: port is already allocated" kad je
     # host port zauzet drugim servisom. Za lokalni dev host-pristup (curl
     # localhost:8080) koristi docker-compose.override.yml (auto-merge na

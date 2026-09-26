@@ -49,13 +49,8 @@ void main() {
       app.main();
       await tester.pumpAndSettle();
 
-      // This test would need to mock the authentication flow
-      // In a real scenario, you would:
-      // 1. Mock the server responses
-      // 2. Mock the WebView/popup behavior
-      // 3. Simulate successful authentication
-      
-      // For demonstration, here's what you would test after successful auth:
+      // Not implemented: it needs mocked proxy responses and a mocked
+      // WebView or popup. After a successful login it should check:
       // expect(find.byKey(const Key('welcome_text')), findsOneWidget);
       // expect(find.text('Welcome, Matija Stepanić!'), findsOneWidget);
       // expect(find.byKey(const Key('logout_button')), findsOneWidget);
@@ -66,8 +61,7 @@ void main() {
       app.main();
       await tester.pumpAndSettle();
 
-      // This test would simulate an authentication error
-      // After error occurs, verify:
+      // Not implemented: it needs a login that fails. Then it should check:
       // expect(find.byKey(const Key('error_container')), findsOneWidget);
       // expect(find.textContaining('Authentication failed'), findsOneWidget);
     });
@@ -76,12 +70,8 @@ void main() {
       app.main();
       await tester.pumpAndSettle();
 
-      // This test would:
-      // 1. Start from authenticated state
-      // 2. Tap logout button
-      // 3. Verify return to initial state
-      
-      // After logout:
+      // Not implemented: it needs a signed-in start state. After tapping the
+      // logout button it should check:
       // expect(find.text('Not authenticated'), findsOneWidget);
       // expect(find.byKey(const Key('signin_button')), findsOneWidget);
     });
@@ -90,11 +80,9 @@ void main() {
       app.main();
       await tester.pumpAndSettle();
 
-      // This test would:
-      // 1. Start from authenticated state
-      // 2. Tap refresh button
-      // 3. Verify loading state
-      // 4. Verify updated user info
+      // Not implemented: it needs a signed-in start state. After tapping the
+      // refresh button it should check the loading state and the updated
+      // user info.
     });
   });
 }

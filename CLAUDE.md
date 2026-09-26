@@ -1,7 +1,6 @@
 # flutter_certilia: onboarding za Claude
 
-Sažet referent za buduće sesije rada na ovom repu. Ne aspiracije,
-samo stvarno stanje koda.
+Sažet pregled stvarnog stanja koda za buduće sesije rada na ovom repu.
 
 **Verzija:** 0.2.0 · **Datum posljednjeg refaktora:** svibanj 2026 ·
 **Licenca:** MIT
@@ -78,8 +77,8 @@ Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
     (npr. `app_links`) i čuvati započeti login u secure storageu. Nije
     reproducirano; "Don't keep activities" u developer opcijama to omogućuje.
 
-Stara lista "odbačenih pristupa" iz `REFACTOR_PLAN.md` navodila je
-razloge koji nisu bili provjereni; tamo je tablica ažurirana.
+`REFACTOR_PLAN.md` uz izvornu listu odbačenih pristupa ima tablicu s
+provjerenim razlozima.
 
 ## Layout
 
@@ -123,6 +122,11 @@ Jedini entry point:
 
 ```dart
 final certilia = await CertiliaSDK.initialize(serverUrl: '...');
+// ili, bez servera:
+final certilia = await CertiliaSDK.initialize(
+  direct: const CertiliaDirectClient(clientId: '...', clientSecret: '...'),
+  callbackUrl: 'https://app.example/certilia_callback.html',
+);
 ```
 
 Opcionalni `callbackUrl` bira kamo Certilia vraća browser nakon logina
@@ -136,12 +140,12 @@ desktopu), ali metode su iste:
 - `authenticate(context) → CertiliaUser`
 - `checkAuthenticationStatus() → bool`
 - `getCurrentUser() → CertiliaUser?`
-- `refreshToken() / refreshToken({accessToken, refreshToken})` (varijanta po klijentu)
+- `refreshToken()`
 - `getExtendedUserInfo() → CertiliaExtendedInfo?`
 - `logout()`
 
-Modeli izvezeni: `CertiliaConfig`, `CertiliaUser`, `CertiliaToken`,
-`CertiliaExtendedInfo`. Iznimke: `CertiliaException`,
+Izvezeni modeli: `CertiliaConfig`, `CertiliaDirectClient`,
+`CertiliaUser`, `CertiliaToken`, `CertiliaExtendedInfo`. Iznimke: `CertiliaException`,
 `CertiliaAuthenticationException`, `CertiliaNetworkException`,
 `CertiliaConfigurationException`. Deprecated typedef-ovi:
 `CertiliaSDKSimple = CertiliaSDK`, `CertiliaConfigSimple = CertiliaConfig`.
@@ -155,21 +159,29 @@ flowchart TD
     F -->|mobile/desktop| SW[CertiliaStatefulWrapper]
     SW -->|bez callbackUrl| WV[CertiliaWebViewClient]
     SW -->|callbackUrl| BC[CertiliaBrowserClient]
-    WC --> PAS[ProxyAuthService]
-    WV --> PAS
-    BC --> PAS
+    WC --> B{CertiliaAuthBackend}
+    WV --> B
+    BC --> B
+    B -->|proxy mode| PAS[ProxyAuthService]
+    B -->|direct mode| DAS[DirectAuthService]
     WC --> TSS[TokenStorageService]
     SW --> TSS
     PAS -->|HTTP| Proxy[(certilia-server)]
+    DAS -->|HTTP| IDP[(Certilia IDP)]
     TSS -->|secure storage| Native[(keychain / KeyStore)]
 ```
 
-Tri sloja: **entry / orchestration** (SDK, klijenti, wrapper), **shared
-services** (HTTP, storage, logger), **platforma-specifični UI**
-(WebView, popup). Sve HTTP komunikacije obavezno kroz
-`ProxyAuthService`; sva persistencija kroz `TokenStorageService`.
+`CertiliaSDK.initialize` bira klijenta po platformi, a
+`createAuthBackend` bira backend: `DirectAuthService` kad je zadan
+`direct`, inače `ProxyAuthService`. Klijenti samo prikazuju Certilijinu
+stranicu (WebView, sistemski browser ili popup) i vraćaju callback;
+HTTP pozive radi backend, a tokene sprema `TokenStorageService`.
 
 ## Tok podataka
+
+Tokovi su opisani za proxy mode. U direct modu `DirectAuthService` sam
+napravi korake initialize i exchange (PKCE, poziv token endpointa,
+provjera ID tokena), bez servera; direct mode uvijek ima `callbackUrl`.
 
 ### Mobile / desktop (WebView)
 
@@ -178,8 +190,8 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
 3. `ProxyAuthService.initialize()` → server vraća authorization_url,
    state, session_id
 4. WebView pokrene authorization_url; user autenticira preko Certilije
-5. WebView detektira callback (`$serverUrl/api/auth/callback`),
-   validira `state`, izvuče `code`
+5. WebView prepozna callback URL proxyja (`$serverUrl/api/auth/callback`)
+   i vrati ga; `codeFromCallback` provjeri `state` i izvuče `code`
 6. `ProxyAuthService.exchange(code, state, sessionId)` → tokeni
 7. `CertiliaStatefulWrapper` sprema tokene + user u secure storage
 
@@ -216,7 +228,7 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
 6. Klijent svake 2s `ProxyAuthService.pollStatus(pollingId)` →
    čim status=completed, dohvati code
 7. `ProxyAuthService.exchange(code, ...)` → tokeni
-8. Popup se sam zatvori
+8. SDK zatvori popup
 
 ## Endpointi `certilia-server`-a koje SDK koristi
 
@@ -235,27 +247,28 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
 
 - Sve HTTP komunikacije idu kroz `CertiliaAuthBackend`
   (`ProxyAuthService` ili `DirectAuthService`). Ne dodaj direktan
-  `http.get/post` u klijente jer zaobilazi retry/timeout/error policy.
-- Sva token persistencija ide kroz `TokenStorageService`. Ne pristupaj
-  `FlutterSecureStorage` direktno (cache key konzistentnost).
+  `http.get/post` u klijente: takav poziv zaobilazi retry, timeout i
+  obradu grešaka iz backenda.
+- Tokene sprema i čita samo `TokenStorageService`. Ne pristupaj
+  `FlutterSecureStorage` direktno, da svi čitaju i pišu iste ključeve.
 - Sva logiranja kroz `CertiliaLogger`, koji ispisuje samo kad je
   `config.enableLogging` uključen.
-- Custom HTTP headeri se **ne** šalju na webu jer trigaju CORS preflight
-  koji server ne dozvoljava. Vidi komentar u
-  `ProxyAuthService._baseHeaders`.
+- Na webu se **ne** šalju custom HTTP headeri: CORS konfiguracija
+  servera dopušta samo `Content-Type` i `Authorization`, pa bi preflight
+  za bilo koji drugi header pao. Vidi `ProxyAuthService._baseHeaders`.
 - Konstruktori `CertiliaWebClient` i `CertiliaStatefulWrapper`
   pokreću `_initializeTokens()/_initializeState()` u `_ready` future.
-  Sve async public metode počinju s `await _ready;`. Nemoj to ukloniti
-  (race koji se vraćao na svaki hot restart).
+  Sve async public metode počinju s `await _ready;`. Nemoj to ukloniti:
+  bez toga metoda pozvana odmah nakon konstrukcije (npr. nakon hot
+  restarta) ne vidi spremljene tokene.
 - Refresh flow šalje oba tokena u JSON body, ne u Authorization header.
-  Server (`authController.refreshToken`) fallback prihvaća header za
-  backward compat, ali nemoj se osloniti na to za nove klijente.
+  Server (`authController.refreshToken`) prihvaća i header, zbog
+  starijih klijenata; novi kod ga ne koristi.
 
 ## Razvojni protokol
 
-- **Manualna Chrome verifikacija** nakon svake inkrementalne izmjene
-  (vidi memory: `feedback-chrome-verify`). User radi `flutter run -d
-  chrome` i prolazi auth flow.
+- **Ručna provjera u Chromeu** nakon svake izmjene: korisnik pokrene
+  `flutter run -d chrome` i prođe login.
 - **Server pokreni paralelno** s `npm run dev:prod` u
   `certilia-server/`. Mora postojati ngrok tunel za auth callback na
   javnoj HTTPS adresi.
@@ -267,8 +280,8 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
   **zašto** ne samo što.
 - **Sigurne stvari raditi slobodno:** edit, test, lokalni commit.
 - **Pitati prije:** push, force push, brisanje grana, mijenjanje
-  shared infrastrukture, mijenjanje server endpointa (može pucati
-  deploy ako client/server idu out-of-sync).
+  shared infrastrukture, mijenjanje server endpointa (deploy se
+  pokvari ako klijent i server ne očekuju iste endpointe).
 
 ## Što se s ovim namjerava raditi
 
@@ -276,7 +289,6 @@ Glavni cilj refaktora bio je pripremiti SDK za reuse kao "Login with
 Certilia" komponenta u drugoj Flutter aplikaciji. Vidi
 `REFACTOR_PLAN.md` za fazni plan i postignuto stanje.
 
-Konkretno: druga aplikacija pulla ovaj repo kao `git:` dep, povezuje
-se na isti `certilia-server` proxy, koristi `CertiliaSDK.initialize()`
-i copy-paste-a UI iz `example/lib/certilia_auth/` ako treba početni
-template.
+Konkretno: druga aplikacija uključi ovaj repo kao `git:` dependency,
+spoji se na isti `certilia-server` proxy, pozove `CertiliaSDK.initialize()`
+i po potrebi kopira UI iz `example/lib/certilia_auth/` kao početak.

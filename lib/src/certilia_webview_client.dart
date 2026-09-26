@@ -35,7 +35,8 @@ class CertiliaWebViewClient extends CertiliaNativeClient {
   }
 }
 
-/// Alias for platform client
+/// The client type on mobile and desktop; `certilia_web_client.dart`
+/// defines the same name for web.
 typedef CertiliaPlatformClient = CertiliaWebViewClient;
 
 /// WebView screen for OAuth authentication

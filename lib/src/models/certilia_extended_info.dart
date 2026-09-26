@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../utils/oib.dart';
 
-/// Extended user information from Certilia API
+/// Full user profile: from the proxy's `/api/user/extended-info`, or from
+/// the ID token claims in direct mode.
 @immutable
 class CertiliaExtendedInfo {
   /// User information object containing all available fields
@@ -22,13 +23,12 @@ class CertiliaExtendedInfo {
 
   /// Creates a [CertiliaExtendedInfo] from a JSON object
   factory CertiliaExtendedInfo.fromJson(Map<String, dynamic> json) {
-    // Server returns snake_case keys: user_info, available_fields, token_expiry
-    // Support both snake_case (from server) and camelCase (legacy) formats
+    // certilia-server sends snake_case keys (user_info, available_fields,
+    // token_expiry); camelCase keys are accepted too.
     final userInfoData = json['user_info'] ?? json['userInfo'];
     final availableFieldsData = json['available_fields'] ?? json['availableFields'];
     final tokenExpiryData = json['token_expiry'] ?? json['tokenExpiry'];
 
-    // Ensure userInfo is a Map, not null
     final userInfoMap = userInfoData is Map<String, dynamic>
         ? userInfoData
         : <String, dynamic>{};

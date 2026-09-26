@@ -6,7 +6,7 @@ import 'certilia_auth/theme/certilia_theme.dart';
 /// URL of the certilia-server proxy. Override at build time:
 ///   flutter run -d chrome --dart-define=CERTILIA_SERVER_URL=https://your.proxy.example
 ///
-/// The default points at the dev ngrok tunnel used during development.
+/// The default is the ngrok tunnel used during development.
 const _defaultServerUrl = 'https://uniformly-credible-opossum.ngrok-free.app';
 const _serverUrl = String.fromEnvironment(
   'CERTILIA_SERVER_URL',

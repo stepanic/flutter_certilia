@@ -1,7 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Internet permission for OAuth -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Keep app running in background during OAuth -->
+    <!-- Neither the SDK nor the example takes a wake lock. A wake lock keeps
+         the CPU awake; it does not stop Android from killing the app in the
+         background during a login. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     
     <application

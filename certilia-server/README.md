@@ -1,6 +1,7 @@
 # Certilia OAuth2 Server
 
-Node.js middleware server that handles OAuth2/OIDC authentication flow with Certilia IDP for Flutter applications.
+Node.js proxy between the flutter_certilia SDK and Certilia's IDP. It runs
+the OAuth 2.0 / OpenID Connect login and holds the Certilia client secrets.
 
 ## Quick Start
 
@@ -50,9 +51,9 @@ flowchart LR
 ```
 
 The proxy holds the Certilia client_id / client_secret so the Flutter
-app never sees them. It also normalizes the userinfo response (Certilia
-production occasionally returns inconsistent shapes; the proxy then falls
-back to ID-token claims).
+app never sees them. It reads the user's claims from the ID token, because
+Certilia's production `userinfo` endpoint rejects calls from a server (see
+[userinfo and token binding](#userinfo-and-token-binding)).
 
 ## API Endpoints
 
@@ -94,8 +95,7 @@ Body:
 The `access_token` field carries the previous access token so the
 server can extract the upstream Certilia tokens from its JWT claims.
 Older clients (pre-flutter_certilia 0.2.0) send this in the
-`Authorization: Bearer` header instead; the controller accepts both
-shapes.
+`Authorization: Bearer` header instead; the controller accepts either.
 
 ### Get User Info
 ```
@@ -108,7 +108,9 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 GET /api/user/extended-info
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
-Returns all available user fields from Certilia
+Returns the user's claims: from Certilia's `userinfo` endpoint where it
+answers, otherwise from the ID token claims stored in the proxy's JWT. The
+`source` field says which.
 
 ### Health Check
 ```
@@ -162,8 +164,10 @@ Certilia's production `userinfo` endpoint rejects the proxy's calls with
 "Valid token binding value not present". Certilia binds access tokens to
 the `atbv` cookie it sets in the user's browser during login, so only a
 request carrying that cookie (made from a page on `idp.certilia.com`)
-succeeds. The proxy reads the user's claims from the ID token instead
-and asks for the OIB in it with the `claims` parameter.
+succeeds. The proxy reads the user's claims from the ID token instead.
+Set `SKIP_USERINFO_ENDPOINT=true` to skip the `userinfo` call altogether.
+The proxy asks for the OIB in the ID token with the `claims` parameter;
+Certilia's portal clients get it as `sub` instead.
 
 ## Available Scripts
 
@@ -195,12 +199,14 @@ and asks for the OIB in it with the `claims` parameter.
 
 ## Security Notes
 
-1. **Never commit credentials** - Use environment variables
-2. **PKCE Required** - Server implements PKCE for OAuth security
-3. **Session Management** - Sessions expire after 10 minutes
-4. **Token Security** - Access tokens expire in 1 hour
-5. **CORS Protection** - Only configured origins allowed
-6. **Rate Limiting** - Configured per IP
+1. **Credentials** stay in environment variables, never in a committed file.
+2. **PKCE**: every login sends an S256 code challenge.
+3. **Login sessions**: a started login expires after 10 minutes.
+4. **Access tokens**: the proxy's JWTs expire after 1 hour (`JWT_EXPIRY`).
+5. **CORS**: only the origins in `ALLOWED_ORIGINS` are allowed; in
+   development, every `localhost` origin too.
+6. **Rate limiting**: 100 requests per IP per 15 minutes on `/api` by
+   default (`RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_MS`).
 
 ## Deployment
 

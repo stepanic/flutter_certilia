@@ -20,7 +20,8 @@ import 'services/certilia_auth_backend.dart';
 /// callback URL, [CertiliaBrowserClient] lets the system browser return a
 /// custom-scheme or App Link redirect.
 ///
-/// Stateless: callers (typically [CertiliaStatefulWrapper]) store tokens.
+/// It keeps no tokens; callers (normally [CertiliaStatefulWrapper]) store
+/// them.
 abstract class CertiliaNativeClient {
   final CertiliaConfig config;
   final String serverUrl;
@@ -45,7 +46,7 @@ abstract class CertiliaNativeClient {
     config.validate();
   }
 
-  /// The redirect URI sent to `/api/auth/initialize`. Certilia sends the
+  /// The redirect URI of the authorization request. Certilia sends the
   /// browser there after login.
   String get redirectUri;
 
@@ -53,9 +54,9 @@ abstract class CertiliaNativeClient {
   /// callback URL Certilia redirected to, or `null` if the user cancelled.
   Future<Uri?> obtainCallback(BuildContext context, String authorizationUrl);
 
-  /// Runs the full OAuth flow. Returns the raw token bundle from
-  /// `/api/auth/exchange` (`accessToken`, `refreshToken`, `idToken`,
-  /// `expiresIn`, `tokenType`, `user`).
+  /// Runs the full OAuth flow. Returns the token bundle from the backend's
+  /// exchange (`accessToken`, `refreshToken`, `idToken`, `expiresIn`,
+  /// `tokenType`, `user`).
   Future<Map<String, dynamic>> authenticate(BuildContext context) async {
     try {
       logger.log('Starting authentication, redirect URI: $redirectUri');
@@ -136,7 +137,7 @@ abstract class CertiliaNativeClient {
   }
 
   /// Fetches basic user info using the supplied access token.
-  /// Returns null on failure rather than throwing; callers expect this.
+  /// Returns null on failure instead of throwing.
   Future<CertiliaUser?> getUserInfo(String accessToken,
       {String? idToken}) async {
     try {
@@ -148,7 +149,8 @@ abstract class CertiliaNativeClient {
   }
 
   /// Fetches extended user info using the supplied access token.
-  /// Returns null on 401/502 so the caller can refresh and retry.
+  /// With the proxy backend, returns null on 401/502 so the caller can
+  /// refresh and retry.
   Future<CertiliaExtendedInfo?> getExtendedUserInfo(String accessToken,
       {String? idToken}) {
     return backend.fetchExtendedInfo(accessToken, idToken: idToken);

@@ -5,7 +5,7 @@
 /// See README.
 library;
 
-// Primary SDK entry point (public API)
+// Entry point
 export 'src/certilia_sdk.dart';
 
 // Public models

@@ -1,7 +1,7 @@
 import 'models/certilia_config.dart';
 
-/// Factory function for non-web platforms
-/// This stub is used when not on web platform
+/// Stub of the web factory for the other platforms, where
+/// [CertiliaSDK.initialize] never calls it.
 dynamic createWebClient({
   required CertiliaConfig config,
   required String serverUrl,

@@ -12,10 +12,12 @@ i Webu.
 
 ## Architecture
 
-The SDK is **proxy-only**. The Flutter client never talks to Certilia
-directly: all OAuth communication is mediated by a backend
-(`certilia-server`, included in this repo) that holds the OAuth
-credentials.
+Certilia only issues confidential clients: its token endpoint answers
+`invalid_client` ("Unsupported Client Authentication Method!") to a code
+exchange without the client secret, and the developer portal offers no
+public (PKCE-only) client. Something has to hold that secret. By default
+it is `certilia-server`, the proxy in this repo, and the Flutter app
+talks only to the proxy:
 
 ```mermaid
 flowchart LR
@@ -25,15 +27,11 @@ flowchart LR
     B -.->|JWT, user| A
 ```
 
-Certilia only issues confidential clients: its token endpoint answers
-`invalid_client` ("Unsupported Client Authentication Method!") to a code
-exchange without the client secret, and the developer portal offers no
-public (PKCE-only) client. The proxy keeps that secret on a server. The
-app can also skip the proxy and hold the client itself; see
-[Direct mode (no server)](#direct-mode-no-server). Either way the app can
+In [direct mode](#direct-mode-no-server) the app holds the client
+itself and talks to Certilia without a server. In both modes the app can
 receive the login redirect itself; see [Login flows](#login-flows).
 
-The auth flow differs slightly by platform:
+In proxy mode without a `callbackUrl`, the login runs like this:
 
 ```mermaid
 sequenceDiagram
@@ -71,7 +69,7 @@ sequenceDiagram
 
 ## Installation
 
-The 0.2.0 line is not yet on pub.dev. Use a `git:` or `path:` dep:
+Version 0.2.0 is not on pub.dev yet. Use a `git:` or `path:` dependency:
 
 ```yaml
 dependencies:
@@ -91,8 +89,8 @@ Requirements: Dart `>=3.2.0`, Flutter `>=3.16.0`.
 
 ## Usage
 
-The SDK has one entry point. The proxy URL is the only required value;
-everything else has defaults you can override.
+The SDK has one entry point. In proxy mode the proxy URL is the only
+required parameter; the others have defaults.
 
 ```dart
 import 'package:flutter_certilia/flutter_certilia.dart';
@@ -107,8 +105,8 @@ final certilia = await CertiliaSDK.initialize(
 );
 ```
 
-Drive the auth flow. The runtime type returned by `initialize` differs
-between web and mobile, but the methods you'll call are the same:
+`initialize` returns a different type on web and on mobile, with the
+same methods:
 
 ```dart
 final user = await certilia.authenticate(context); // popup / WebView
@@ -126,20 +124,21 @@ flutter run --dart-define=CERTILIA_SERVER_URL=https://your-proxy.example
 
 ### UI
 
-`flutter_certilia` ships **API-only**. There are no opinionated widgets
-or themes; your app keeps full control of its design system.
+`flutter_certilia` contains no widgets or themes, so the login screen is
+built with your app's own design.
 [`example/lib/certilia_auth/`](example/lib/certilia_auth/) is a working
-reference UI (login button, authenticated view, user-info cards, theme
-toggle) that you can copy-paste and adapt.
+UI (login button, logged-in view, user info cards, theme toggle) to copy
+and adapt.
 
 ## Login flows
 
 `CertiliaSDK.initialize(callbackUrl: ...)` chooses where Certilia sends
 the browser after login. Certilia registers exactly **one callback URL
 per client** and compares it exactly, so every flow with its own
-callback needs its own Certilia client, and the proxy must know it
-(`CERTILIA_CLIENTS`, see [`certilia-server/README.md`](certilia-server/README.md)).
-The code exchange always goes through the proxy.
+callback needs its own Certilia client. In proxy mode the proxy must
+know each of them (`CERTILIA_CLIENTS`, see
+[`certilia-server/README.md`](certilia-server/README.md)) and exchanges
+the code; in direct mode the app exchanges it with Certilia.
 
 | `callbackUrl` | Mobile | Web |
 |---|---|---|
@@ -275,8 +274,8 @@ page on your app's origin, an Android App Link, an iOS Universal Link):
 with a custom scheme, another app on the phone could receive the redirect
 and, holding your secret, complete the login. Someone with the secret can
 still start logins that show your service name on Certilia's page and
-spend your client's login quota. Check Certilia's terms before shipping a
-client secret; asking Certilia to make the client public (WSO2 supports
+spend your client's login quota. Check Certilia's terms before putting a
+client secret in an app; asking Certilia to make the client public (WSO2 supports
 clients without a secret; the portal does not offer it) avoids the
 question.
 
@@ -303,20 +302,20 @@ emulator with an App Link callback; no request reached a server of ours.
 
 | Symbol | Purpose |
 |---|---|
-| `CertiliaSDK.initialize(...)` | Build a platform-appropriate client |
+| `CertiliaSDK.initialize(...)` | Creates the client for the current platform |
 | `CertiliaConfig` | Configuration object (proxy URL or direct client, callback URL, scopes, logging) |
 | `CertiliaDirectClient` | Certilia client id/secret for [direct mode](#direct-mode-no-server) |
 | `CertiliaUser` | Basic user profile (`sub`, `firstName`, `lastName`, `oib`, `email`, ...) |
 | `CertiliaToken` | Access/refresh/ID tokens + expiry helpers |
-| `CertiliaExtendedInfo` | Full Certilia profile: any field the upstream returned |
+| `CertiliaExtendedInfo` | Full profile: every claim Certilia returned |
 | `CertiliaException` | Base exception; subclasses below |
 | `CertiliaAuthenticationException` | OAuth flow failed |
 | `CertiliaNetworkException` | HTTP-level failure with `statusCode` |
-| `CertiliaConfigurationException` | Misconfigured SDK |
+| `CertiliaConfigurationException` | Invalid configuration |
 
-Deprecated typedefs (`CertiliaSDKSimple`, `CertiliaConfigSimple`) are
-kept for one minor release; they map directly to the new names and
-will be removed in 1.0.0.
+The deprecated typedefs `CertiliaSDKSimple` and `CertiliaConfigSimple`
+are aliases of `CertiliaSDK` and `CertiliaConfig` and will be removed in
+1.0.0.
 
 ## Error handling
 
@@ -324,7 +323,7 @@ will be removed in 1.0.0.
 try {
   await certilia.authenticate(context);
 } on CertiliaAuthenticationException catch (e) {
-  // User cancelled or upstream rejected the flow
+  // The user cancelled, or Certilia or the proxy refused the login
 } on CertiliaNetworkException catch (e) {
   // HTTP error reaching the proxy
   print('Proxy returned ${e.statusCode}: ${e.message}');
@@ -335,20 +334,21 @@ try {
 
 ## Platform notes
 
-- **iOS, Android**: without `callbackUrl`, auth happens in an in-app
-  `WebView` and the proxy's HTTPS callback closes the loop; no
-  registration in the app is needed. With `callbackUrl`, see
+- **iOS, Android**: without `callbackUrl`, the login runs in an in-app
+  `WebView`, which catches the redirect to the proxy's HTTPS callback,
+  so the app registers nothing. With `callbackUrl`, see
   [Login flows](#login-flows).
-- **Web**: opens a popup. The proxy's CORS config must allow your
-  origin. The SDK does **not** send custom request headers from web for
-  this reason (custom headers trigger preflight).
-- **Desktop**: `webview_flutter` does not ship a desktop backend; the
-  SDK isn't tested on macOS/Windows/Linux. Add the appropriate
-  platform plugin if you need it.
+- **Web**: the login runs in a popup. In proxy mode the proxy's CORS
+  configuration must allow your origin. The SDK sends no custom request
+  headers from web: the proxy's CORS configuration allows only
+  `Content-Type` and `Authorization`.
+- **Desktop**: the SDK is not tested on macOS, Windows or Linux. The
+  WebView flow needs a `webview_flutter` implementation for the
+  platform.
 
-The `certilia-server` proxy that the SDK talks to is in this repo at
-[`certilia-server/`](certilia-server/). See its README for setup,
-environment variables, and the supported endpoint contract.
+The `certilia-server` proxy is in this repo at
+[`certilia-server/`](certilia-server/). Its README covers setup,
+environment variables and the endpoints the SDK calls.
 
 ## Troubleshooting
 
@@ -361,20 +361,12 @@ environment variables, and the supported endpoint contract.
   device logs.
 - **`CertiliaNetworkException` on `/api/auth/initialize`**: the
   proxy URL is wrong, the proxy is down, or CORS is blocking your
-  origin. `enableLogging: true` plus the browser network tab will
-  point at the actual failing request.
-- **Logged in but `getCurrentUser()` returns null right after hot
-  restart**: this was a real bug pre-0.2.0; the constructor's init
-  future is now awaited before any public method runs. If you still
-  see it, file an issue.
+  origin. `enableLogging: true` and the browser's network tab show
+  which request fails.
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Open an issue or a pull request on GitHub.
 
 ## License
 

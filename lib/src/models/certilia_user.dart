@@ -25,7 +25,8 @@ class CertiliaUser {
   /// User's email address (if available)
   final String? email;
 
-  /// Raw JSON response from the server
+  /// The JSON this user was built from: the proxy's user object, or the ID
+  /// token claims in direct mode.
   final Map<String, dynamic> raw;
 
   /// Creates a new [CertiliaUser]

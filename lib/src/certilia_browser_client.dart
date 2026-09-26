@@ -58,9 +58,9 @@ class CertiliaBrowserClient extends CertiliaNativeClient {
   @override
   String get redirectUri => config.callbackUrl!;
 
-  /// [CertiliaConfig.preferEphemeralSession] applies to iOS only.
+  /// [CertiliaConfig.preferEphemeralSession] applies to iOS and macOS only.
   ///
-  /// On iOS an ephemeral ASWebAuthenticationSession shares no cookies and
+  /// There an ephemeral ASWebAuthenticationSession shares no cookies and
   /// skips the "App wants to use certilia.com to sign in" alert. On Android,
   /// flutter_web_auth_2 5.x answers preferEphemeral with a plain Custom Tab
   /// when Chrome is older than 141, and that tab stays on top of the app

@@ -1,5 +1,8 @@
-// Certilia OAuth Callback JavaScript
-// This file handles the communication between the OAuth callback page and the parent window
+// Script of the proxy's callback page (/api/auth/callback). It hands the
+// result to a WebView JavaScript interface (window.OAuthCallback), to the
+// opener window or to a deep link, whichever exists. The SDK's web flow uses
+// none of them: it polls the proxy, which stored the code before rendering
+// this page.
 
 (function() {
     'use strict';
@@ -11,7 +14,7 @@
     const error = document.getElementById('oauth-error')?.textContent || '';
     const errorDescription = document.getElementById('oauth-error-description')?.textContent || '';
     
-    // Enhanced debug logging
+    // Debug logging
     console.log('===== CERTILIA CALLBACK SCRIPT LOADED =====');
     console.log('Page URL:', window.location.href);
     console.log('Extracted data:');
@@ -75,9 +78,10 @@
             console.log(`Sending message attempt ${attempt}...`);
             
             try {
-                // Try multiple target origins
+                // postMessage to '*' does not throw, so the loop always stops
+                // at the first entry and the others are never used.
                 const origins = [
-                    '*', // Fallback to any origin
+                    '*',
                     window.location.origin,
                     'http://localhost:3000',
                     'http://localhost:8080',
@@ -146,7 +150,7 @@
         }, 1000);
     }
     
-    // Additional debugging - log all window properties
+    // Debug logging of how this window relates to other windows
     console.log('===== WINDOW DEBUGGING =====');
     try {
         console.log('Window name:', window.name);
@@ -158,7 +162,7 @@
         console.error('Error accessing window properties:', e);
     }
     
-    // Auto-close window for polling approach
+    // Without an opener (the polling flow) the page closes itself.
     if (!window.opener || window.opener === window) {
         console.log('No opener detected - using polling approach');
         console.log('Window will close automatically in 3 seconds...');

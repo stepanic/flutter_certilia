@@ -33,9 +33,9 @@ import 'services/token_storage_service.dart';
 ///   `Cross-Origin-Opener-Policy` has cut the popup off from its opener,
 ///   which is why neither flow uses `window.opener` or `postMessage`.
 ///
-/// HTTP communication lives in the [CertiliaAuthBackend]; token persistence in
-/// [TokenStorageService]. This class owns popup window lifecycle and
-/// in-memory session state.
+/// HTTP requests go through the [CertiliaAuthBackend] and the saved token
+/// through [TokenStorageService]. This class opens and closes the popup and
+/// holds the current token in memory.
 class CertiliaWebClient {
   final CertiliaConfig config;
   final String serverUrl;
@@ -45,9 +45,9 @@ class CertiliaWebClient {
 
   CertiliaToken? _currentToken;
 
-  /// Completes when the constructor's initial token load has finished.
-  /// Async-public methods await this so callers don't see "not authenticated"
-  /// before storage has been consulted.
+  /// Completes when the constructor has loaded the saved token. The public
+  /// async methods await it, so they do not report "not authenticated"
+  /// before storage has been read.
   late final Future<void> _ready;
 
   static const Duration _pollingInterval = Duration(seconds: 2);
@@ -94,8 +94,8 @@ class CertiliaWebClient {
     }
   }
 
-  /// Runs the full popup + polling OAuth flow. Persists the resulting
-  /// tokens, returns the resolved user.
+  /// Runs the login in a popup (see the class comment for the two ways the
+  /// result comes back), saves the tokens and returns the user.
   Future<CertiliaUser> authenticate(BuildContext context) async {
     // Safari (and every browser on iOS) lets a page open a window only while
     // it is still handling the user's tap; a network round trip ends that,
@@ -395,7 +395,8 @@ class CertiliaWebClient {
       try {
         final data = await proxy.pollStatus(pollingId);
         if (data == null) {
-          // Session expired or not found.
+          // The proxy has no such polling session: it expired or never
+          // existed.
           cleanup();
           if (!completer.isCompleted) completer.complete(null);
           return;
@@ -515,7 +516,7 @@ class CertiliaWebClient {
     );
     if (info != null) return info;
 
-    // 401/502: try to refresh once.
+    // The backend returned null for a 401/502: refresh once and retry.
     if (_currentToken!.refreshToken == null) {
       await logout();
       return null;
@@ -560,5 +561,6 @@ class CertiliaWebClient {
   }
 }
 
-/// Alias for platform client
+/// The client type on web; `certilia_webview_client.dart` defines the same
+/// name for mobile and desktop.
 typedef CertiliaPlatformClient = CertiliaWebClient;

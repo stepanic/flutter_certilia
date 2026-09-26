@@ -1,20 +1,19 @@
 # flutter_certilia example
 
-Reference Flutter application demonstrating `flutter_certilia` 0.2.0
-against a live `certilia-server` proxy.
+Flutter application that uses `flutter_certilia` 0.2.0 against a running
+`certilia-server` proxy, or against Certilia directly in direct mode.
 
 ## What it shows
 
-- One-button sign-in with Croatian eID (eOsobna) via the proxy
+- Sign-in with the Croatian eID (eOsobna) from one button
 - Authenticated dashboard with basic + extended user info cards
-- Token expiry countdown with manual refresh
 - Logout returning to the login screen
 - Session persistence across hot restart and app relaunch
 - Light / dark theme toggle, Croatian / English text
 
-The whole UI lives in `lib/certilia_auth/` and is intentionally outside
-the published SDK: the SDK ships API-only so it does not impose a
-design system. Copy-paste the parts you need.
+The whole UI is in `lib/certilia_auth/`. The SDK itself contains no UI,
+so it does not impose a design system on your app; copy the parts you
+need.
 
 ## Running
 
@@ -35,13 +34,18 @@ flutter run -d chrome \
   --dart-define=CERTILIA_SERVER_URL=https://your-proxy.example
 ```
 
+`--dart-define=CERTILIA_CALLBACK_URL=...` selects the login flow that
+receives the redirect in the app (see "Login flows" in the root README).
+`CERTILIA_CLIENT_ID` and `CERTILIA_CLIENT_SECRET` switch to direct mode,
+which needs an https `CERTILIA_CALLBACK_URL`.
+
 The proxy must be running with valid Certilia OAuth credentials. See
 [`certilia-server/README.md`](../certilia-server/README.md).
 
 ## How the SDK is wired
 
-`lib/main.dart` is a thin shell. The real integration is
-`lib/certilia_auth/certilia_auth_widget.dart`:
+`lib/main.dart` only reads the build settings and builds the widget.
+The SDK calls are in `lib/certilia_auth/certilia_auth_widget.dart`:
 
 ```dart
 final certilia = await CertiliaSDK.initialize(
@@ -57,14 +61,17 @@ await certilia.refreshToken();
 await certilia.logout();
 ```
 
-That's the entire surface. See [`../INTEGRATION.md`](../INTEGRATION.md)
-for a step-by-step guide to dropping the SDK into a brand new app.
+Those are all the SDK calls the example makes. See
+[`../INTEGRATION.md`](../INTEGRATION.md) for adding the SDK to a new app
+step by step.
 
 ## Platform behavior
 
-On web the SDK opens a popup against the proxy and polls until auth
-completes. On mobile it pushes a full-screen `WebView` route. Both
-close themselves on success and return a `CertiliaUser`.
+Without `CERTILIA_CALLBACK_URL`, the SDK opens a popup on web and polls
+the proxy until the login completes; on mobile it pushes a full-screen
+`WebView` route. Both close themselves on success and return a
+`CertiliaUser`. With a callback URL, web uses a popup and the callback
+page, and mobile uses the system browser.
 
 ```mermaid
 flowchart LR
@@ -87,6 +94,6 @@ flowchart LR
   your origin.
 - **"Authentication was cancelled"**: user closed the popup/WebView
   before the flow finished.
-- **Logged in but UI shows login screen on hot restart**: this was a real
-  bug in 0.1.x, fixed in 0.2.0. If still seen on 0.2.0+, file an
-  issue at the [tracker](https://github.com/stepanic/flutter_certilia/issues).
+- **Logged in but the UI shows the login screen after a hot restart**:
+  file an issue at the
+  [tracker](https://github.com/stepanic/flutter_certilia/issues).

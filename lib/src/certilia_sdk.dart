@@ -4,13 +4,13 @@ import 'certilia_stateful_wrapper.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_direct_client.dart';
 
-// Platform-specific factory: picks the web popup client on web, the
-// WebView-based stateful wrapper on mobile/desktop.
-// NB: gate on dart.library.js_interop (NE dart.library.html) jer je html
-// dostupan samo u dart2js, dok js_interop postoji i u dart2js i u dart2wasm.
-// Pod --wasm build-om dart.library.html je false pa bi se birao non-web stub
-// (createWebClient baca UnsupportedError). Web client koristi package:web pa
-// je wasm-kompatibilan.
+// createWebClient comes from the web factory on web and from a stub that
+// throws elsewhere; mobile and desktop use CertiliaStatefulWrapper instead.
+// NB: uvjetni import provjerava dart.library.js_interop, ne
+// dart.library.html, jer html postoji samo u dart2js, a js_interop i u
+// dart2js i u dart2wasm. Pod --wasm buildom dart.library.html je false, pa
+// bi se izabrao stub (createWebClient baca UnsupportedError). Web client
+// koristi package:web, pa radi i pod wasm-om.
 import 'certilia_sdk_factory.dart'
     if (dart.library.js_interop) 'certilia_sdk_factory_web.dart';
 
@@ -37,10 +37,10 @@ import 'certilia_sdk_factory.dart'
 class CertiliaSDK {
   CertiliaSDK._();
 
-  /// Build a platform-appropriate client. The returned object differs by
-  /// platform (popup-based on web, [CertiliaStatefulWrapper] on
-  /// mobile/desktop) but exposes the same authenticate/refresh/logout/
-  /// getCurrentUser/getExtendedUserInfo surface.
+  /// Builds the client for the current platform: `CertiliaWebClient` on
+  /// web, [CertiliaStatefulWrapper] on mobile and desktop. Both have the
+  /// same authenticate, refreshToken, logout, getCurrentUser and
+  /// getExtendedUserInfo methods.
   ///
   /// [callbackUrl] selects how the login result reaches the app; see
   /// [CertiliaConfig.callbackUrl]. Pass either [serverUrl] (the proxy) or

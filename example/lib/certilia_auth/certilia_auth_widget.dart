@@ -8,11 +8,11 @@ import 'widgets/authenticated_view.dart';
 import 'models/auth_state.dart';
 import 'theme/certilia_theme.dart';
 
-/// Standalone Certilia Authentication Widget
+/// Certilia login screen and signed-in view in one widget.
 ///
-/// This is a completely self-contained authentication feature that handles
-/// all authentication state internally. It requires no external navigation
-/// and works as a drop-in component.
+/// It keeps the authentication state itself and switches between the login
+/// view and the signed-in view without navigation, so an app can use it as
+/// its home screen.
 ///
 /// Usage:
 /// ```dart
@@ -228,7 +228,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
         return;
       }
 
-      // Use the SDK instance we already have for consistency
+      // A new SDK instance; it loads the stored tokens itself.
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
         callbackUrl: widget.callbackUrl,

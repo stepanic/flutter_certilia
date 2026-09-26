@@ -1,9 +1,11 @@
-# Lokalni dev override: automatski se mergea kod `docker compose up` (BEZ -f).
+# Lokalni dev override: `docker compose up` bez -f ga automatski spaja s
+# docker-compose.yml.
 #
-# Coolify deploya s eksplicitnim `-f docker-compose.yml` pa OVAJ FILE IGNORIRA →
-# na Coolifyju NEMA host port bindinga (Traefik / Cloudflare Tunnel rutaju interno,
-# bez "port already allocated" konflikta). Lokalno ovo objavi port na host da
-# možeš `curl http://localhost:${PORT:-8080}/api/health`.
+# Coolify deploya s eksplicitnim `-f docker-compose.yml` i ovaj file ne čita,
+# pa na Coolifyju nema host port bindinga: Traefik / Cloudflare Tunnel rutaju
+# promet interno i nema konflikta "port is already allocated". Lokalno ovaj
+# file objavljuje port na hostu, da možeš
+# `curl http://localhost:${PORT:-8080}/api/health`.
 services:
   certilia-server:
     ports:

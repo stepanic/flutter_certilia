@@ -15,7 +15,7 @@ import 'certilia_auth_backend.dart';
 import 'certilia_logger.dart';
 
 /// [CertiliaAuthBackend] that talks to Certilia directly, with the client
-/// secret shipped in the app (see [CertiliaDirectClient] for what that
+/// secret compiled into the app (see [CertiliaDirectClient] for what that
 /// exposes).
 ///
 /// The login is the PKCE authorization code flow. The token endpoint
@@ -306,7 +306,8 @@ class DirectAuthService implements CertiliaAuthBackend {
     if (response.statusCode != 200) {
       final error = body['error'] as String?;
       // An OAuth error response means Certilia refused the request; anything
-      // else (a 5xx, a proxy's HTML page) is an outage worth retrying.
+      // else (a 5xx, an HTML error page from a proxy in between) is an
+      // outage, and a later request can succeed.
       if (error == null) {
         throw CertiliaNetworkException(
           message: 'Certilia token $op failed',
