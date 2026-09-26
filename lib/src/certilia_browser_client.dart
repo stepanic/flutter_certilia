@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
@@ -57,6 +58,24 @@ class CertiliaBrowserClient extends CertiliaNativeClient {
   @override
   String get redirectUri => config.callbackUrl!;
 
+  /// [CertiliaConfig.preferEphemeralSession] applies to iOS only.
+  ///
+  /// On iOS an ephemeral ASWebAuthenticationSession shares no cookies and
+  /// skips the "App wants to use certilia.com to sign in" alert. On Android,
+  /// flutter_web_auth_2 5.x answers preferEphemeral with a plain Custom Tab
+  /// when Chrome is older than 141, and that tab stays on top of the app
+  /// after the redirect whenever the user has interacted with the page
+  /// (which a Certilia login always involves): the login completes, but the
+  /// user has to close Certilia's page by hand. Without preferEphemeral it
+  /// launches through AuthTabIntent, Chrome returns the redirect as an
+  /// activity result, and the tab closes. Tested on an Android 16 emulator
+  /// with Chrome 133, for a custom-scheme and an https App Link callback.
+  bool get _preferEphemeral =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.macOS
+          ? config.preferEphemeralSession
+          : false;
+
   @override
   Future<Uri?> obtainCallback(
     BuildContext context,
@@ -69,7 +88,7 @@ class CertiliaBrowserClient extends CertiliaNativeClient {
         url: authorizationUrl,
         callbackUrlScheme: callback.scheme,
         options: FlutterWebAuth2Options(
-          preferEphemeral: config.preferEphemeralSession,
+          preferEphemeral: _preferEphemeral,
           httpsHost: isHttps ? callback.host : null,
           httpsPath: isHttps ? callback.path : null,
         ),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -196,6 +197,38 @@ void main() {
       expect(launcher.scheme, 'https');
       expect(launcher.options!.httpsHost, 'app.example');
       expect(launcher.options!.httpsPath, '/certilia/callback');
+    });
+
+    testWidgets('preferEphemeral reaches the browser on iOS only',
+        (tester) async {
+      Future<bool> ephemeralOn(TargetPlatform platform) async {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          final proxy = _FakeProxy();
+          final launcher = _FakeLauncher(
+            result: '$_customCallback?code=c&state=state-1',
+          );
+          final context = await _context(tester);
+          await CertiliaBrowserClient(
+            config: const CertiliaConfig(
+              serverUrl: _serverUrl,
+              callbackUrl: _customCallback,
+              preferEphemeralSession: true,
+            ),
+            serverUrl: _serverUrl,
+            proxyService: proxy.service,
+            launcher: launcher.call,
+          ).authenticate(context);
+          return launcher.options!.preferEphemeral;
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      }
+
+      expect(await ephemeralOn(TargetPlatform.iOS), isTrue);
+      // On Android an ephemeral session makes flutter_web_auth_2 leave the
+      // Custom Tab open over the app on older Chrome.
+      expect(await ephemeralOn(TargetPlatform.android), isFalse);
     });
 
     testWidgets('closing the browser reports a cancellation', (tester) async {
