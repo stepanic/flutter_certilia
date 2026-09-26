@@ -19,6 +19,20 @@ Git historija pokazuje da postoji **samo jedan stabilan put** za Certilia OAuth 
 | **Web popup s `window.postMessage`** | Napušten | Cross-origin policy + Croatian eID flow nepouzdano dostavljao poruke. Zamijenjeno server-side polling-om (`ef67fa4`). |
 | **WebView direktno na Certilia (bez proxy-ja)** | Napušten | Android WebView "HTTP client closed", background network problemi, certifikati. Stabilizirano tek kroz proxy. |
 
+### Revizija 2026-09-26
+
+Razlozi u tablici gore nisu bili provjereni prema Certiliji. Ponovno
+testirano pravim eID loginima (Chrome, Safari na iOS 18) i izravnim
+pozivima na `idp.certilia.com`:
+
+| Pristup | Stvarno stanje |
+|---|---|
+| Native AppAuth / sistemski browser | Moguće. IDP poštuje custom scheme (`hr.example.app:1/callback`; portal ga prihvaća zbog buga u regexu iako piše "Only HTTPS is allowed"); https App Link / Universal Link portal dopušta. Testirano pravim loginom na Android 16 emulatoru (Chrome 133) za oba callbacka: custom scheme i verificirani App Link. iOS nativno nije testirano. Implementirano kao `CertiliaBrowserClient`; `preferEphemeral` se na Androidu ne šalje jer s njim flutter_web_auth_2 ostavlja Custom Tab otvoren iznad aplikacije. |
+| `url_launcher` + system browser | Razlog nije bio točan: taj klijent je koristio HTTPS callback proxyja, ne custom scheme. Pokriven s `CertiliaBrowserClient`. |
+| Direktni OAuth bez proxyja | **Stoji.** Certilia izdaje samo povjerljive klijente: token endpoint bez secreta vraća `invalid_client`. Userinfo nije "nepouzdan": token je vezan za `atbv` cookie u browseru (token binding), claimovi dolaze iz ID tokena. |
+| Popup s `window.opener.postMessage` | Stoji: pod `Cross-Origin-Opener-Policy: same-origin` popup ima `window.opener === null`. Isti cilj (popup bez pollinga) postignut callback stranicom na originu aplikacije + BroadcastChannel/localStorage. |
+| WebView bez proxyja | Zabilježene greške bile su između aplikacije i ngroka, ne Certilije; WebView i danas izravno otvara Certiliju. "Bez proxyja" je nemoguće samo zbog client secreta. |
+
 **Posljedica:** Sav kod vezan uz prve četiri opcije je mrtav i može se izbrisati bez gubitka funkcionalnosti.
 
 ---

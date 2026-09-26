@@ -25,10 +25,12 @@ flowchart LR
     B -.->|JWT, user| A
 ```
 
-Direct integration was tried and abandoned — Certilia rejects custom
-URL schemes (blocking AppAuth on mobile) and Certilia's `userinfo`
-endpoint requires server-side fallbacks to be reliable in production.
-See [`REFACTOR_PLAN.md`](REFACTOR_PLAN.md) for the full history.
+The proxy exists because Certilia only issues confidential clients:
+its token endpoint answers `invalid_client` ("Unsupported Client
+Authentication Method!") to a code exchange without the client secret,
+and the developer portal offers no public (PKCE-only) client. The secret
+therefore has to stay on a server. The app can still receive the login
+redirect itself; see [Login flows](#login-flows).
 
 The auth flow differs slightly by platform:
 
@@ -129,6 +131,97 @@ or themes — your app keeps full control of its design system.
 reference UI (login button, authenticated view, user-info cards, theme
 toggle) that you can copy-paste and adapt.
 
+## Login flows
+
+`CertiliaSDK.initialize(callbackUrl: ...)` chooses where Certilia sends
+the browser after login. Certilia registers exactly **one callback URL
+per client** and compares it exactly, so every flow with its own
+callback needs its own Certilia client, and the proxy must know it
+(`CERTILIA_CLIENTS`, see [`certilia-server/README.md`](certilia-server/README.md)).
+The code exchange always goes through the proxy.
+
+| `callbackUrl` | Mobile | Web |
+|---|---|---|
+| `null` (default) | In-app WebView watches for the proxy's `/api/auth/callback` | Popup; the app polls the proxy until the code arrives |
+| Custom scheme, e.g. `hr.example.app:1/callback` | System browser (Android Auth Tab / Custom Tabs, iOS `ASWebAuthenticationSession`); the OS returns the redirect | n/a |
+| https App Link / Universal Link | Same as above, redirect verified through `assetlinks.json` / `apple-app-site-association` | n/a |
+| https page on the app's own origin, e.g. `https://app.example/certilia_callback.html` | n/a | Popup; [`certilia_callback.html`](example/web/certilia_callback.html) hands the result to the app over BroadcastChannel and localStorage; no polling |
+
+One https URL can serve as both the web callback page and the Android
+App Link, so a single Certilia client covers both.
+
+### Web
+
+- Copy [`example/web/certilia_callback.html`](example/web/certilia_callback.html)
+  into your app's `web/` folder and register its full URL as the
+  client's callback.
+- Call `authenticate()` directly in the button's tap handler, with no
+  network await before it. Safari (and every browser on iOS) blocks
+  `window.open` once the page has waited on the network after the tap;
+  the SDK opens the popup blank first for this reason.
+- The flow works when the app page sends
+  `Cross-Origin-Opener-Policy: same-origin`: the callback page does not
+  use `window.opener`, which COOP cuts as soon as the popup reaches
+  Certilia.
+
+### Android
+
+Add `flutter_web_auth_2`'s callback activity to `AndroidManifest.xml`
+with an intent filter for your callback; the example app has both
+variants:
+
+```xml
+<activity
+    android:name="com.linusu.flutter_web_auth_2.CallbackActivity"
+    android:exported="true"
+    android:taskAffinity="">
+  <!-- custom scheme -->
+  <intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="hr.example.app" />
+  </intent-filter>
+  <!-- https App Link -->
+  <intent-filter android:autoVerify="true">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="https" android:host="app.example"
+          android:path="/certilia_callback.html" />
+  </intent-filter>
+</activity>
+```
+
+For the App Link, serve `/.well-known/assetlinks.json` on the callback
+host with your package name and signing certificate SHA-256.
+
+Tested with real logins on an Android 16 emulator (Chrome 133) with both
+a custom-scheme and a verified App Link callback. `preferEphemeralSession`
+is not passed to the browser on Android: with it, flutter_web_auth_2 5.x
+opens a plain Custom Tab on Chrome older than 141, and that tab stays on
+top of the app after the redirect once the user has interacted with the
+page. Keep `android:taskAffinity=""` on `MainActivity` and
+`CallbackActivity` as the plugin recommends.
+
+### iOS (native)
+
+`ASWebAuthenticationSession` handles a custom-scheme callback without
+registering the scheme in `Info.plist`. An https callback needs iOS
+17.4+ and the callback host in the app's Associated Domains, with
+`apple-app-site-association` served on that host. The native iOS flow
+has not been tested in this repo yet; the web flow has (Safari, iOS 18).
+
+### Registering a custom-scheme callback
+
+The Certilia developer portal states "Only HTTPS is allowed" for the
+callback URL, and its form rejects `hr.example.app://callback`. Its URL
+check accepts `hr.example.app:1/callback`, which is a valid URI with the
+scheme `hr.example.app`; Certilia's IDP honours it (tested with a real
+login, code exchange and refresh). Registering it works around the
+portal's stated rule, so prefer an https App Link / Universal Link where
+you can.
+
 ## Public API
 
 | Symbol | Purpose |
@@ -164,12 +257,13 @@ try {
 
 ## Platform notes
 
-- **iOS, Android**: no scheme-registration needed — auth happens in an
-  in-app `WebView`, and the proxy's HTTPS callback is what closes the
-  loop, not a custom URL scheme.
-- **Web**: opens a popup against the proxy. The proxy's CORS config
-  must allow your origin. The SDK does **not** send custom request
-  headers from web for this reason (custom headers trigger preflight).
+- **iOS, Android**: without `callbackUrl`, auth happens in an in-app
+  `WebView` and the proxy's HTTPS callback closes the loop; no
+  registration in the app is needed. With `callbackUrl`, see
+  [Login flows](#login-flows).
+- **Web**: opens a popup. The proxy's CORS config must allow your
+  origin. The SDK does **not** send custom request headers from web for
+  this reason (custom headers trigger preflight).
 - **Desktop**: `webview_flutter` does not ship a desktop backend; the
   SDK isn't tested on macOS/Windows/Linux. Add the appropriate
   platform plugin if you need it.
@@ -180,9 +274,13 @@ environment variables, and the supported endpoint contract.
 
 ## Troubleshooting
 
-- **"Authentication was cancelled"** — popup blocked on web (allow
-  popups for your origin) or user closed the WebView. Check
-  DevTools console / device logs.
+- **"Popup blocked"** (web): the browser refused `window.open`. On
+  iOS this happens when the app awaits something (for example a network
+  request) between the tap and `authenticate()`; call it directly in
+  the tap handler.
+- **"Authentication was cancelled"**: the user closed the popup,
+  WebView or browser tab before finishing. Check the DevTools console /
+  device logs.
 - **`CertiliaNetworkException` on `/api/auth/initialize`** — the
   proxy URL is wrong, the proxy is down, or CORS is blocking your
   origin. `enableLogging: true` plus the browser network tab will

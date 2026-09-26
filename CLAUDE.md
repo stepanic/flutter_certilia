@@ -19,23 +19,46 @@ flowchart LR
     B <--> C[Certilia IDP]
 ```
 
-## Što NE smije biti predloženo
+## Što je provjereno o Certiliji (2026-09-26)
 
-Ovo su pristupi koji su isprobani i institucionalno/tehnički blokirani.
-Detalji u `REFACTOR_PLAN.md` i memory file-u `project-abandoned-approaches`:
+Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
+(WSO2 Identity Server):
 
-1. **Native AppAuth (custom URL scheme)** — Certilia ne registrira
-   `com.example.app://oauth`. Blokada na strani providera.
-2. **Direktni OAuth iz Flutter klijenta** — zahtijeva client_id /
-   secret u aplikaciji; Certilia `userinfo` endpoint nepouzdan u
-   produkciji.
-3. **Web popup s `window.postMessage`** — cross-origin policy +
-   eID flow nepouzdano dostavlja poruke. Zato server-side polling.
-4. **WebView direktno na Certilia (bez proxyja)** — Android/iOS
-   WebView issues s background networkom i certifikatima.
+1. **Proxy je nužan zbog client secreta.** Certilia izdaje samo
+   povjerljive (confidential) klijente: token endpoint bez secreta vraća
+   `invalid_client` ("Unsupported Client Authentication Method!"), a
+   developer portal ne nudi javni PKCE klijent. Zato code exchange
+   uvijek ide kroz `certilia-server`. Ovo je jedino stvarno ograničenje.
+2. **Jedan callback URL po klijentu, točno podudaranje.** Svaki tok s
+   vlastitim callbackom treba vlastiti Certilia klijent; proxy ih bira
+   po `redirect_uri` (`CERTILIA_CLIENTS`).
+3. **Custom scheme radi na IDP-u, portal ga formalno ne dopušta.**
+   Portal piše "Only HTTPS is allowed" i odbija `scheme://...`, ali
+   prihvaća `hr.example.app:1/callback` (valjan URI sa shemom
+   `hr.example.app`) zbog buga u regexu. IDP ga poštuje: login, exchange
+   i refresh rade. Preferiraj https App Link / Universal Link.
+4. **`userinfo` nije nepouzdan nego vezan za browser.** Access token je
+   vezan za `atbv` cookie koji Certilia postavi u browseru pri loginu;
+   poziv sa servera uvijek dobije "Valid token binding value not
+   present". Claimove čitamo iz ID tokena (`claims` parametar traži OIB).
+5. **`window.opener.postMessage` ne radi pod COOP-om.** Kad app šalje
+   `Cross-Origin-Opener-Policy: same-origin`, popup na Certiliji ima
+   `window.opener === null`. Callback stranica na originu aplikacije
+   zato javlja rezultat preko BroadcastChannela i localStoragea.
+6. **Safari (i svi browseri na iOS-u) blokira `window.open` nakon
+   mrežnog awaita.** Web klijent otvara prazan popup prije poziva
+   proxyju; `authenticate()` se mora zvati izravno iz tap handlera.
+7. **Login potvrđuje push u Certilia aplikaciji**, pa WebView, Auth Tab,
+   ASWebAuthenticationSession i popup rade jednako; nema prebacivanja
+   između aplikacija.
+8. **Android: bez `preferEphemeral`.** S njim flutter_web_auth_2 5.x na
+   Chromeu < 141 otvara običan Custom Tab koji nakon redirecta ostaje
+   iznad aplikacije. `CertiliaBrowserClient` ga šalje samo na iOS-u.
+   Provjereno na Android 16 emulatoru (Chrome 133) pravim loginom i
+   lažnim proxyjem.
 
-Ako se javi prijedlog u bilo kojem od ova četiri smjera, pogledaj git
-historiju za commit u kojem je odbačen prije nego što ga implementiraš.
+Stara lista "odbačenih pristupa" iz `REFACTOR_PLAN.md` navodila je
+razloge koji nisu bili provjereni; tamo je tablica ažurirana.
 
 ## Layout
 
@@ -46,8 +69,11 @@ lib/
     certilia_sdk.dart                      # CertiliaSDK.initialize()
     certilia_sdk_factory.dart              # stub (mobile)
     certilia_sdk_factory_web.dart          # web platform factory
-    certilia_webview_client.dart           # mobile/desktop: WebView flow
-    certilia_web_client.dart               # web: popup + polling flow
+    certilia_native_client.dart            # mobile/desktop: zajednički OAuth tok (exchange, refresh, state)
+    certilia_webview_client.dart           # mobile/desktop: WebView flow (bez callbackUrl)
+    certilia_browser_client.dart           # mobile: sistemski browser (callbackUrl: custom scheme / App Link)
+    certilia_web_client.dart               # web: popup + polling ili popup + callback stranica
+    oauth_callback.dart                    # parsiranje callback URL-a, provjera state-a
     certilia_stateful_wrapper.dart         # mobile/desktop: state management
     services/
       proxy_auth_service.dart              # **sve** HTTP komunikacije s proxyjem
@@ -73,6 +99,10 @@ Jedini entry point:
 final certilia = await CertiliaSDK.initialize(serverUrl: '...');
 ```
 
+Opcionalni `callbackUrl` bira kamo Certilia vraća browser nakon logina
+(vidi README, "Login flows"). Bez njega vrijede WebView (mobile) i
+popup + polling (web).
+
 Vraćeni objekt ima različit konkretan tip ovisno o platformi
 (`CertiliaWebClient` na webu, `CertiliaStatefulWrapper` na mobile/
 desktopu), ali metode su iste:
@@ -97,9 +127,11 @@ flowchart TD
     SDK[CertiliaSDK.initialize] --> F{Platform?}
     F -->|web| WC[CertiliaWebClient]
     F -->|mobile/desktop| SW[CertiliaStatefulWrapper]
-    SW --> WV[CertiliaWebViewClient]
+    SW -->|bez callbackUrl| WV[CertiliaWebViewClient]
+    SW -->|callbackUrl| BC[CertiliaBrowserClient]
     WC --> PAS[ProxyAuthService]
     WV --> PAS
+    BC --> PAS
     WC --> TSS[TokenStorageService]
     SW --> TSS
     PAS -->|HTTP| Proxy[(certilia-server)]
@@ -125,12 +157,35 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
 6. `ProxyAuthService.exchange(code, state, sessionId)` → tokeni
 7. `CertiliaStatefulWrapper` sprema tokene + user u secure storage
 
+### Mobile (sistemski browser, `callbackUrl` postavljen)
+
+1. `CertiliaBrowserClient.authenticate(context)` →
+2. `ProxyAuthService.initialize(redirectUri: callbackUrl)`; proxy bira
+   Certilia klijenta registriranog za taj callback
+3. `flutter_web_auth_2` otvara authorization_url u Auth Tabu / Custom
+   Tabu (Android) ili `ASWebAuthenticationSession` (iOS)
+4. OS vraća redirect na custom scheme ili App Link; `codeFromCallback`
+   provjeri `state` i izvuče `code`
+5. `ProxyAuthService.exchange(...)` → tokeni
+
+### Web (popup + callback stranica, `callbackUrl` postavljen)
+
+1. `CertiliaWebClient.authenticate(context)` otvara prazan popup
+   odmah, prije ikakvog awaita (Safari)
+2. `ProxyAuthService.initialize(redirectUri: callbackUrl)`
+3. Popup ide na authorization_url; Certilia ga vraća na
+   `certilia_callback.html` na originu aplikacije
+4. Stranica šalje callback URL preko BroadcastChannela `certilia_auth`
+   i ostavlja ga u localStorageu (`certilia_auth_result`); app ga čita
+   i briše, provjeri `state`
+5. `ProxyAuthService.exchange(...)` → tokeni
+
 ### Web (popup + polling)
 
-1. `CertiliaWebClient.authenticate(context)` →
+1. `CertiliaWebClient.authenticate(context)` → otvori prazan popup
 2. `ProxyAuthService.initialize()` → state + session_id
 3. `ProxyAuthService.startPollingSession()` → polling_id
-4. Otvori popup na authorization_url
+4. Popup ide na authorization_url
 5. Server obradi callback, sprema rezultat na polling_id
 6. Klijent svake 2s `ProxyAuthService.pollStatus(pollingId)` →
    čim status=completed, dohvati code
@@ -177,7 +232,7 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
   `certilia-server/`. Mora postojati ngrok tunel za auth callback na
   javnoj HTTPS adresi.
 - **Testovi:** `flutter test` mora biti zelen prije svakog commita.
-  Trenutno 46 testova; ako mijenjaš `ProxyAuthService`, ažuriraj
+  Trenutno 59 testova; ako mijenjaš `ProxyAuthService`, ažuriraj
   `test/services/proxy_auth_service_test.dart`.
 - **Commit poruke:** conventional (`feat:`, `fix:`, `refactor:`,
   `docs:`, `test:`, `build:`). Engleski. Kratak naslov, body objašnjava

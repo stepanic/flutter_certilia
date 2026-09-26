@@ -138,6 +138,33 @@ ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
 
 Create `.env.local.production` for PRODUCTION environment with production credentials.
 
+### Several Certilia clients (`CERTILIA_CLIENTS`)
+
+Certilia registers exactly one callback URL per client and compares it
+exactly. Each login flow with its own callback therefore needs its own
+client: the proxy's `/api/auth/callback` (WebView and popup+polling), a
+mobile custom scheme, an https App Link or web callback page. List the
+extra clients as a JSON array:
+
+```env
+CERTILIA_CLIENTS=[{"client_id":"...","client_secret":"...","redirect_uri":"hr.example.app:1/callback"},{"client_id":"...","client_secret":"...","redirect_uri":"https://app.example/certilia_callback.html"}]
+```
+
+`/api/auth/initialize` picks the client registered for the `redirect_uri`
+it receives; the OAuth session remembers it and `/api/auth/exchange`
+uses the same credentials. An unknown `redirect_uri` uses the default
+client (`CERTILIA_CLIENT_ID`), and Certilia then rejects it unless it is
+that client's callback.
+
+### userinfo and token binding
+
+Certilia's production `userinfo` endpoint rejects the proxy's calls with
+"Valid token binding value not present". Certilia binds access tokens to
+the `atbv` cookie it sets in the user's browser during login, so only a
+request carrying that cookie (made from a page on `idp.certilia.com`)
+succeeds. The proxy reads the user's claims from the ID token instead
+and asks for the OIB in it with the `claims` parameter.
+
 ## Available Scripts
 
 | Command | Description |
