@@ -1,5 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 import 'dart:async';
+import 'dart:convert';
+import 'dart:js_interop';
 // ignore: deprecated_member_use
 import 'package:web/web.dart' as web;
 
@@ -10,15 +12,23 @@ import 'models/certilia_config.dart';
 import 'models/certilia_extended_info.dart';
 import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
+import 'oauth_callback.dart';
 import 'services/certilia_logger.dart';
 import 'services/proxy_auth_service.dart';
 import 'services/token_storage_service.dart';
 
 /// Web-specific client for Certilia OAuth authentication.
 ///
-/// Opens a popup window for the auth flow and polls the proxy server for
-/// completion (browser cross-origin policies make `postMessage` unreliable
-/// with Croatian eID flows — see project history).
+/// Opens a popup window for the auth flow. How the result gets back depends
+/// on [CertiliaConfig.callbackUrl]:
+/// - `null`: Certilia redirects to the proxy's `/api/auth/callback` and the
+///   app polls the proxy until the code arrives.
+/// - a page on the app's own origin: Certilia redirects there, and the page
+///   (see `example/web/certilia_callback.html`) posts the callback URL on
+///   the `certilia_auth` BroadcastChannel and through a `storage` event.
+///   Both reach every same-origin document even when
+///   `Cross-Origin-Opener-Policy` has cut the popup off from its opener,
+///   which is why neither flow uses `window.opener` or `postMessage`.
 ///
 /// HTTP communication lives in [ProxyAuthService]; token persistence in
 /// [TokenStorageService]. This class owns popup window lifecycle and
@@ -42,6 +52,10 @@ class CertiliaWebClient {
   static const Duration _pollingTimeout = Duration(minutes: 5);
   static const int _popupWidth = 500;
   static const int _popupHeight = 700;
+
+  /// BroadcastChannel name and localStorage key the callback page writes to.
+  static const String callbackChannel = 'certilia_auth';
+  static const String callbackStorageKey = 'certilia_auth_result';
 
   CertiliaWebClient({
     required this.config,
@@ -81,21 +95,34 @@ class CertiliaWebClient {
       await _ready;
       _logger.log('Starting web authentication flow');
 
-      final authData = await _proxy.initialize();
-      final polling = await _proxy.startPollingSession(
-        state: authData['state'] as String,
-        sessionId: authData['session_id'] as String,
-      );
-
-      final code = await _openAuthPopupWithPolling(
-        authorizationUrl: authData['authorization_url'] as String,
-        pollingId: polling['polling_id'] as String,
-      );
-
-      if (code == null) {
-        throw const CertiliaAuthenticationException(
-          message: 'Authentication was cancelled',
+      final String code;
+      final Map<String, dynamic> authData;
+      if (config.callbackUrl != null) {
+        authData = await _proxy.initialize(redirectUri: config.callbackUrl);
+        final callback = await _openAuthPopupWithCallbackPage(
+          authorizationUrl: authData['authorization_url'] as String,
+          state: authData['state'] as String,
         );
+        code = codeFromCallback(
+          callback,
+          expectedState: authData['state'] as String,
+        );
+      } else {
+        authData = await _proxy.initialize();
+        final polling = await _proxy.startPollingSession(
+          state: authData['state'] as String,
+          sessionId: authData['session_id'] as String,
+        );
+        final polledCode = await _openAuthPopupWithPolling(
+          authorizationUrl: authData['authorization_url'] as String,
+          pollingId: polling['polling_id'] as String,
+        );
+        if (polledCode == null) {
+          throw const CertiliaAuthenticationException(
+            message: 'Authentication was cancelled',
+          );
+        }
+        code = polledCode;
       }
 
       final tokenData = await _proxy.exchange(
@@ -123,16 +150,9 @@ class CertiliaWebClient {
     }
   }
 
-  Future<String?> _openAuthPopupWithPolling({
-    required String authorizationUrl,
-    required String pollingId,
-  }) async {
-    final completer = Completer<String?>();
-
+  web.Window _openPopup(String authorizationUrl) {
     final left = (web.window.screen.width - _popupWidth) ~/ 2;
     final top = (web.window.screen.height - _popupHeight) ~/ 2;
-
-    _logger.log('Opening auth popup, polling id: $pollingId');
     final popup = web.window.open(
       authorizationUrl,
       'certilia_auth',
@@ -143,6 +163,96 @@ class CertiliaWebClient {
         message: 'Popup blocked. Allow popups for this site and try again.',
       );
     }
+    return popup;
+  }
+
+  /// Opens the popup and waits for the callback page on the app's origin to
+  /// report the callback URL. Returns null on timeout or when the user
+  /// closes the popup.
+  Future<Uri?> _openAuthPopupWithCallbackPage({
+    required String authorizationUrl,
+    required String state,
+  }) async {
+    final completer = Completer<Uri?>();
+    _logger.log('Opening auth popup, callback page: ${config.callbackUrl}');
+    final popup = _openPopup(authorizationUrl);
+
+    // Accept only a callback for this login: same callback page and our
+    // state. Messages from another tab's login are ignored.
+    void onPayload(String? payload) {
+      if (payload == null || completer.isCompleted) return;
+      final Uri url;
+      try {
+        final decoded = jsonDecode(payload) as Map<String, dynamic>;
+        url = Uri.parse(decoded['url'] as String);
+      } catch (_) {
+        return;
+      }
+      final expected = Uri.parse(config.callbackUrl!);
+      if (url.origin != expected.origin || url.path != expected.path) return;
+      if (url.queryParameters['state'] != state) return;
+      _logger.log('Callback page reported the result');
+      completer.complete(url);
+    }
+
+    final channel = web.BroadcastChannel(callbackChannel);
+    channel.onmessage = ((web.MessageEvent e) {
+      onPayload((e.data as JSString?)?.toDart);
+    }).toJS;
+
+    final storageListener = ((web.StorageEvent e) {
+      if (e.key == callbackStorageKey) onPayload(e.newValue);
+    }).toJS;
+    web.window.addEventListener('storage', storageListener);
+
+    // Same rule as the polling flow: under COOP `popup.closed` reads true
+    // at once for a cross-origin popup, so a close only counts as a cancel
+    // after we have seen the popup open.
+    var sawPopupOpen = false;
+    final popupCheckTimer = Timer.periodic(_popupCheckInterval, (timer) {
+      if (!popup.closed) {
+        sawPopupOpen = true;
+        return;
+      }
+      timer.cancel();
+      if (!sawPopupOpen) return;
+      // The callback page closes the popup itself right after posting, so
+      // give the message a moment to arrive before calling it a cancel.
+      Timer(const Duration(seconds: 2), () {
+        if (!completer.isCompleted) {
+          _logger.log('Popup closed without a callback');
+          completer.complete(null);
+        }
+      });
+    });
+    final timeoutTimer = Timer(_pollingTimeout, () {
+      if (!completer.isCompleted) {
+        _logger.log('Timed out waiting for the callback page');
+        completer.complete(null);
+      }
+    });
+
+    try {
+      return await completer.future;
+    } finally {
+      popupCheckTimer.cancel();
+      timeoutTimer.cancel();
+      channel.close();
+      web.window.removeEventListener('storage', storageListener);
+      try {
+        popup.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<String?> _openAuthPopupWithPolling({
+    required String authorizationUrl,
+    required String pollingId,
+  }) async {
+    final completer = Completer<String?>();
+
+    _logger.log('Opening auth popup, polling id: $pollingId');
+    final popup = _openPopup(authorizationUrl);
 
     Timer? pollTimer;
     Timer? popupCheckTimer;

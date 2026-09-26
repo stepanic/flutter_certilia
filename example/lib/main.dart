@@ -12,6 +12,12 @@ const _serverUrl = String.fromEnvironment(
   defaultValue: _defaultServerUrl,
 );
 
+/// Where Certilia redirects after login, when the app receives the redirect
+/// itself (see `CertiliaConfig.callbackUrl`). Empty keeps the default flows.
+///   Android custom scheme: --dart-define=CERTILIA_CALLBACK_URL=hr.example.app:1/callback
+///   Web / App Link:        --dart-define=CERTILIA_CALLBACK_URL=https://app.example/certilia_callback.html
+const _callbackUrl = String.fromEnvironment('CERTILIA_CALLBACK_URL');
+
 const _scopes = ['openid', 'profile', 'eid', 'email', 'offline_access'];
 
 void main() {
@@ -39,6 +45,7 @@ class _MyAppState extends State<MyApp> {
   CertiliaAuthWidget _buildAuthWidget() {
     return CertiliaAuthWidget(
       serverUrl: _serverUrl,
+      callbackUrl: _callbackUrl.isEmpty ? null : _callbackUrl,
       scopes: _scopes,
       enableLogging: true,
       onThemeToggle: _toggleTheme,

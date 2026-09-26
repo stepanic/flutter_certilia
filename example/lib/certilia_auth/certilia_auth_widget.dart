@@ -23,6 +23,10 @@ import 'theme/certilia_theme.dart';
 /// ```
 class CertiliaAuthWidget extends StatefulWidget {
   final String serverUrl;
+
+  /// See `CertiliaConfig.callbackUrl`. Null keeps the WebView (mobile) and
+  /// popup+polling (web) flows.
+  final String? callbackUrl;
   final List<String> scopes;
   final VoidCallback? onThemeToggle;
   final bool enableLogging;
@@ -30,6 +34,7 @@ class CertiliaAuthWidget extends StatefulWidget {
   const CertiliaAuthWidget({
     super.key,
     required this.serverUrl,
+    this.callbackUrl,
     this.scopes = const ['openid', 'profile', 'eid', 'email', 'offline_access'],
     this.onThemeToggle,
     this.enableLogging = false,
@@ -110,6 +115,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
       debugPrint('📱 [CertiliaAuthWidget] Initializing SDK...');
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
+        callbackUrl: widget.callbackUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
       );
@@ -203,6 +209,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
       // Use the SDK instance we already have for consistency
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
+        callbackUrl: widget.callbackUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
       );
@@ -242,6 +249,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
     try {
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
+        callbackUrl: widget.callbackUrl,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
       );

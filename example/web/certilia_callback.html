@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!--
+  Certilia redirects here after login when the app runs with
+  callbackUrl = <app origin>/certilia_callback.html (web) or uses this URL as
+  its Android App Link / iOS Universal Link (mobile).
+
+  The page hands the callback URL (code + state) to the app window that
+  started the login. It uses a BroadcastChannel and a localStorage write
+  (which fires a `storage` event in the other same-origin windows), not
+  window.opener: when the app page sends Cross-Origin-Opener-Policy:
+  same-origin, the browser cuts the link between the app and this popup as
+  soon as the popup visits Certilia's origin.
+
+  The SDK only accepts a message whose state matches the login it started.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certilia sign-in</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 3rem 1rem; text-align: center; color: #1f2937; }
+</style>
+<p id="message">Finishing sign-in…</p>
+<script>
+  (function () {
+    var payload = JSON.stringify({ url: window.location.href, at: Date.now() });
+    try {
+      var channel = new BroadcastChannel('certilia_auth');
+      channel.postMessage(payload);
+      channel.close();
+    } catch (e) {}
+    try {
+      localStorage.setItem('certilia_auth_result', payload);
+      localStorage.removeItem('certilia_auth_result');
+    } catch (e) {}
+    // Keep the authorization code out of the address bar and history.
+    history.replaceState(null, '', window.location.pathname);
+    setTimeout(function () {
+      window.close();
+      document.getElementById('message').textContent =
+        'Sign-in finished. You can close this window.';
+    }, 300);
+  })();
+</script>

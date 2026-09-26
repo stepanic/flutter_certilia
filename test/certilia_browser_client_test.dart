@@ -9,7 +9,7 @@ import 'package:http/testing.dart';
 
 import 'package:flutter_certilia/flutter_certilia.dart';
 import 'package:flutter_certilia/src/certilia_browser_client.dart';
-import 'package:flutter_certilia/src/certilia_native_client.dart';
+import 'package:flutter_certilia/src/oauth_callback.dart';
 import 'package:flutter_certilia/src/services/certilia_logger.dart';
 import 'package:flutter_certilia/src/services/proxy_auth_service.dart';
 
