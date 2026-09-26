@@ -5,11 +5,12 @@
   its Android App Link / iOS Universal Link (mobile).
 
   The page hands the callback URL (code + state) to the app window that
-  started the login. It uses a BroadcastChannel and a localStorage write
-  (which fires a `storage` event in the other same-origin windows), not
-  window.opener: when the app page sends Cross-Origin-Opener-Policy:
-  same-origin, the browser cuts the link between the app and this popup as
-  soon as the popup visits Certilia's origin.
+  started the login. It uses a BroadcastChannel and a localStorage entry
+  (which fires a `storage` event in the other same-origin windows, and which
+  the app also reads when it resumes), not window.opener: when the app page
+  sends Cross-Origin-Opener-Policy: same-origin, the browser cuts the link
+  between the app and this popup as soon as the popup visits Certilia's
+  origin.
 
   The SDK only accepts a message whose state matches the login it started.
 -->
@@ -28,9 +29,11 @@
       channel.postMessage(payload);
       channel.close();
     } catch (e) {}
+    // Left in place for the app to read and delete: a mobile browser may
+    // have suspended the app's tab while the user approved the login in the
+    // Certilia app, and messages sent to a suspended tab can be lost.
     try {
       localStorage.setItem('certilia_auth_result', payload);
-      localStorage.removeItem('certilia_auth_result');
     } catch (e) {}
     // Keep the authorization code out of the address bar and history.
     history.replaceState(null, '', window.location.pathname);

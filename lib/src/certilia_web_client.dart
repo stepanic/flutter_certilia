@@ -91,6 +91,21 @@ class CertiliaWebClient {
   /// Runs the full popup + polling OAuth flow. Persists the resulting
   /// tokens, returns the resolved user.
   Future<CertiliaUser> authenticate(BuildContext context) async {
+    // Safari (and every browser on iOS) lets a page open a window only while
+    // it is still handling the user's tap; a network round trip ends that,
+    // and window.open then returns null. So the popup opens blank here,
+    // before the first await, and goes to Certilia once the proxy has
+    // returned the authorization URL. Callers must call authenticate()
+    // directly from the tap handler, without awaiting network I/O first.
+    // (Chrome and Firefox allow popups for a few seconds after a click,
+    // which is why opening after the proxy call works there.)
+    final web.Window popup;
+    try {
+      popup = _openPopup();
+    } catch (e) {
+      _logger.log('Authentication failed: $e');
+      rethrow;
+    }
     try {
       await _ready;
       _logger.log('Starting web authentication flow');
@@ -100,6 +115,7 @@ class CertiliaWebClient {
       if (config.callbackUrl != null) {
         authData = await _proxy.initialize(redirectUri: config.callbackUrl);
         final callback = await _openAuthPopupWithCallbackPage(
+          popup: popup,
           authorizationUrl: authData['authorization_url'] as String,
           state: authData['state'] as String,
         );
@@ -114,6 +130,7 @@ class CertiliaWebClient {
           sessionId: authData['session_id'] as String,
         );
         final polledCode = await _openAuthPopupWithPolling(
+          popup: popup,
           authorizationUrl: authData['authorization_url'] as String,
           pollingId: polling['polling_id'] as String,
         );
@@ -142,6 +159,7 @@ class CertiliaWebClient {
       return user;
     } catch (e) {
       _logger.log('Authentication failed: $e');
+      _closePopup(popup);
       if (e is CertiliaException) rethrow;
       throw CertiliaAuthenticationException(
         message: 'Authentication failed',
@@ -150,40 +168,88 @@ class CertiliaWebClient {
     }
   }
 
-  web.Window _openPopup(String authorizationUrl) {
+  /// Opens an empty, centred popup. Must run while the browser is still
+  /// handling the user's tap; see [authenticate].
+  web.Window _openPopup() {
     final left = (web.window.screen.width - _popupWidth) ~/ 2;
     final top = (web.window.screen.height - _popupHeight) ~/ 2;
     final popup = web.window.open(
-      authorizationUrl,
+      '',
       'certilia_auth',
       'width=$_popupWidth,height=$_popupHeight,left=$left,top=$top',
     );
     if (popup == null) {
       throw const CertiliaAuthenticationException(
         message: 'Popup blocked. Allow popups for this site and try again.',
+        code: 'popup_blocked',
       );
     }
     return popup;
   }
 
-  /// Opens the popup and waits for the callback page on the app's origin to
-  /// report the callback URL. Returns null on timeout or when the user
-  /// closes the popup.
+  void _closePopup(web.Window popup) {
+    try {
+      popup.close();
+    } catch (_) {}
+  }
+
+  /// Calls [onUserClosed] when the user closes [popup].
+  ///
+  /// `popup.closed` alone cannot tell: when the app page sends
+  /// `Cross-Origin-Opener-Policy: same-origin`, the browser cuts the app off
+  /// from the popup as soon as it navigates to Certilia, and `closed` reads
+  /// true while the popup is still open. Without COOP, reading
+  /// `popup.location.href` throws while the popup shows Certilia's
+  /// (cross-origin) page. Only after seeing that do we know the reference
+  /// is intact, so only then does a later `closed` mean the user closed it.
+  /// Otherwise the flow relies on its result channel and timeout.
+  Timer _watchForUserClose(web.Window popup, void Function() onUserClosed) {
+    var sawCrossOrigin = false;
+    return Timer.periodic(_popupCheckInterval, (timer) {
+      if (!popup.closed) {
+        try {
+          popup.location.href;
+        } catch (_) {
+          sawCrossOrigin = true;
+        }
+        return;
+      }
+      timer.cancel();
+      if (sawCrossOrigin) {
+        onUserClosed();
+      } else {
+        _logger.log('popup.closed without seeing the popup on Certilia '
+            '(COOP cut the reference, or it closed before loading); '
+            'waiting for the result or the timeout');
+      }
+    });
+  }
+
+  /// Sends [popup] to Certilia and waits for the callback page on the app's
+  /// origin to report the callback URL. Returns null on timeout or when the
+  /// user closes the popup.
   Future<Uri?> _openAuthPopupWithCallbackPage({
+    required web.Window popup,
     required String authorizationUrl,
     required String state,
   }) async {
     final completer = Completer<Uri?>();
-    _logger.log('Opening auth popup, callback page: ${config.callbackUrl}');
-    final popup = _openPopup(authorizationUrl);
+    _logger.log('Sending popup to Certilia, callback page: ${config.callbackUrl}');
+    popup.location.href = authorizationUrl;
 
-    // Accept only a callback for this login: same callback page and our
-    // state. Messages from another tab's login are ignored.
-    void onPayload(String? payload) {
+    // Accept only a callback for this login: same callback page, our state,
+    // written in the last 10 minutes. Results of another tab's login are
+    // ignored. The accepted result is removed from localStorage.
+    void onPayload(String? payload, String via) {
       if (payload == null || completer.isCompleted) return;
       final Uri url;
       try {
         final decoded = jsonDecode(payload) as Map<String, dynamic>;
+        final at = decoded['at'] as int?;
+        if (at != null &&
+            DateTime.now().millisecondsSinceEpoch - at > 10 * 60 * 1000) {
+          return;
+        }
         url = Uri.parse(decoded['url'] as String);
       } catch (_) {
         return;
@@ -191,31 +257,37 @@ class CertiliaWebClient {
       final expected = Uri.parse(config.callbackUrl!);
       if (url.origin != expected.origin || url.path != expected.path) return;
       if (url.queryParameters['state'] != state) return;
-      _logger.log('Callback page reported the result');
+      _logger.log('Callback page reported the result via $via');
+      try {
+        web.window.localStorage.removeItem(callbackStorageKey);
+      } catch (_) {}
       completer.complete(url);
     }
 
     final channel = web.BroadcastChannel(callbackChannel);
     channel.onmessage = ((web.MessageEvent e) {
-      onPayload((e.data as JSString?)?.toDart);
+      onPayload((e.data as JSString?)?.toDart, 'BroadcastChannel');
     }).toJS;
 
     final storageListener = ((web.StorageEvent e) {
-      if (e.key == callbackStorageKey) onPayload(e.newValue);
+      if (e.key == callbackStorageKey) onPayload(e.newValue, 'storage event');
     }).toJS;
     web.window.addEventListener('storage', storageListener);
 
-    // Same rule as the polling flow: under COOP `popup.closed` reads true
-    // at once for a cross-origin popup, so a close only counts as a cancel
-    // after we have seen the popup open.
-    var sawPopupOpen = false;
-    final popupCheckTimer = Timer.periodic(_popupCheckInterval, (timer) {
-      if (!popup.closed) {
-        sawPopupOpen = true;
-        return;
-      }
-      timer.cancel();
-      if (!sawPopupOpen) return;
+    // Mobile browsers suspend background tabs, and while the user approves
+    // the login in the Certilia app this tab is in the background. Events
+    // sent to it then can be lost, so also read the entry the callback page
+    // leaves in localStorage. Timers resume when the tab does.
+    final storageCheckTimer = Timer.periodic(_popupCheckInterval, (_) {
+      try {
+        onPayload(
+          web.window.localStorage.getItem(callbackStorageKey),
+          'localStorage check',
+        );
+      } catch (_) {}
+    });
+
+    final popupCheckTimer = _watchForUserClose(popup, () {
       // The callback page closes the popup itself right after posting, so
       // give the message a moment to arrive before calling it a cancel.
       Timer(const Duration(seconds: 2), () {
@@ -236,23 +308,23 @@ class CertiliaWebClient {
       return await completer.future;
     } finally {
       popupCheckTimer.cancel();
+      storageCheckTimer.cancel();
       timeoutTimer.cancel();
       channel.close();
       web.window.removeEventListener('storage', storageListener);
-      try {
-        popup.close();
-      } catch (_) {}
+      _closePopup(popup);
     }
   }
 
   Future<String?> _openAuthPopupWithPolling({
+    required web.Window popup,
     required String authorizationUrl,
     required String pollingId,
   }) async {
     final completer = Completer<String?>();
 
-    _logger.log('Opening auth popup, polling id: $pollingId');
-    final popup = _openPopup(authorizationUrl);
+    _logger.log('Sending popup to Certilia, polling id: $pollingId');
+    popup.location.href = authorizationUrl;
 
     Timer? pollTimer;
     Timer? popupCheckTimer;
@@ -310,29 +382,9 @@ class CertiliaWebClient {
       }
     });
 
-    // COOP gotcha: pod `Cross-Origin-Opener-Policy: same-origin` (nužan za
-    // wasm crossOriginIsolated / skwasm threading) browser PRESIJECA
-    // opener→popup referencu za cross-origin popupe (Certilia/IDP) → `popup.closed`
-    // čita `true` odmah iako popup radi. Zato popup.closed koristimo kao signal
-    // otkazivanja SAMO ako smo popup prvo vidjeli otvoren; inače se oslanjamo
-    // isključivo na polling (+ timeout), koji je izvor istine jer hita proxy
-    // neovisno o COOP-u. Bez ovoga svaki cross-origin popup login lažno otkaže
-    // nakon ~4s (radi lokalno gdje COOP nije postavljen, puca u produkciji).
-    var sawPopupOpen = false;
-    popupCheckTimer = Timer.periodic(_popupCheckInterval, (timer) {
-      if (!popup.closed) {
-        sawPopupOpen = true;
-        return;
-      }
-      if (!sawPopupOpen) {
-        _logger.log('popup.closed=true bez viđenog otvaranja — COOP-severed '
-            'referenca; oslanjam se na polling');
-        timer.cancel();
-        return;
-      }
-      // Popup je stvarno bio otvoren pa zatvoren → korisnik je odustao.
-      timer.cancel();
-      // Give polling one more window — server callback may still be in flight.
+    popupCheckTimer = _watchForUserClose(popup, () {
+      // Give polling one more window: the server callback may still be in
+      // flight.
       Timer(const Duration(seconds: 3), () {
         if (!completer.isCompleted && active) {
           _logger.log('Popup closed without polling result');
