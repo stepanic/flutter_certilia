@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/index.js';
+import { resolveClientByRedirectUri } from '../config/clients.js';
 import logger from '../utils/logger.js';
 import { ExternalServiceError } from '../utils/errors.js';
 
@@ -71,6 +72,7 @@ class CertiliaService {
    * @param {string} params.nonce - Nonce parameter
    * @param {string} params.codeChallenge - PKCE code challenge
    * @param {string} params.redirectUri - Redirect URI
+   * @param {Object} [params.client] - Certilia client; defaults to the one registered for redirectUri
    * @returns {string} Authorization URL
    */
   buildAuthorizationUrl({
@@ -78,9 +80,10 @@ class CertiliaService {
     nonce,
     codeChallenge,
     redirectUri = config.certilia.redirectUri,
+    client = resolveClientByRedirectUri(config.certilia.clients, redirectUri),
   }) {
     const params = new URLSearchParams({
-      client_id: config.certilia.clientId,
+      client_id: client.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: config.certilia.scopes.join(' '),
@@ -114,14 +117,20 @@ class CertiliaService {
    * @param {string} params.code - Authorization code
    * @param {string} params.codeVerifier - PKCE code verifier
    * @param {string} params.redirectUri - Redirect URI
+   * @param {Object} [params.client] - Certilia client; defaults to the one registered for redirectUri
    * @returns {Promise<Object>} Token response
    */
-  async exchangeCodeForTokens({ code, codeVerifier, redirectUri = config.certilia.redirectUri }) {
+  async exchangeCodeForTokens({
+    code,
+    codeVerifier,
+    redirectUri = config.certilia.redirectUri,
+    client = resolveClientByRedirectUri(config.certilia.clients, redirectUri),
+  }) {
     try {
       const params = new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: config.certilia.clientId,
-        client_secret: config.certilia.clientSecret,
+        client_id: client.clientId,
+        client_secret: client.clientSecret,
         code,
         redirect_uri: redirectUri,
         code_verifier: codeVerifier,

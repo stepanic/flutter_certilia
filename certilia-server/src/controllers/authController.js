@@ -7,6 +7,8 @@ import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, gene
 import logger from '../utils/logger.js';
 import { AuthenticationError, ValidationError } from '../utils/errors.js';
 import { getBranding } from '../config/branding.js';
+import { config } from '../config/index.js';
+import { resolveClientByRedirectUri, resolveClientById } from '../config/clients.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -101,12 +103,17 @@ export const initializeAuth = async (req, res, next) => {
     const codeVerifier = generatePKCEVerifier();
     const codeChallenge = generatePKCEChallenge(codeVerifier);
 
+    // Each Certilia client has exactly one callback URL, so the redirect_uri
+    // decides which client this login uses.
+    const client = resolveClientByRedirectUri(config.certilia.clients, redirect_uri);
+
     // Create session to store OAuth parameters
     const sessionId = sessionService.createSession({
       state,
       nonce,
       codeVerifier,
       redirectUri: redirect_uri,
+      clientId: client.clientId,
       createdAt: new Date().toISOString(),
     });
 
@@ -116,9 +123,10 @@ export const initializeAuth = async (req, res, next) => {
       nonce,
       codeChallenge,
       redirectUri: redirect_uri,
+      client,
     });
 
-    logger.info('OAuth flow initialized', { sessionId });
+    logger.info('OAuth flow initialized', { sessionId, clientId: client.clientId });
 
     res.json({
       authorization_url: authorizationUrl,
@@ -256,6 +264,7 @@ export const exchangeCode = async (req, res, next) => {
       code,
       codeVerifier: session.codeVerifier,
       redirectUri: session.redirectUri,
+      client: resolveClientById(config.certilia.clients, session.clientId),
     });
     
     logger.info('Token exchange response:', {
