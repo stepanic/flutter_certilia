@@ -95,6 +95,7 @@ lib/
     certilia_browser_client.dart           # mobile: sistemski browser (callbackUrl: custom scheme / App Link)
     certilia_web_client.dart               # web: popup + polling ili popup + callback stranica
     oauth_callback.dart                    # parsiranje callback URL-a, provjera state-a
+    refresh_errors.dart                    # koji neuspjeli refresh završava sesiju
     certilia_stateful_wrapper.dart         # mobile/desktop: state management
     services/
       certilia_auth_backend.dart           # sučelje: initialize/exchange/refresh/profil
@@ -113,7 +114,7 @@ lib/
       certilia_exception.dart              # hijerarhija iznimaka
 example/                                   # demo aplikacija, copy-paste-ready UI
 certilia-server/                           # Node.js proxy
-test/                                      # unit testovi (46 prolaze)
+test/                                      # unit testovi (96 prolaze)
 ```
 
 ## Javni API
@@ -259,7 +260,7 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
   `certilia-server/`. Mora postojati ngrok tunel za auth callback na
   javnoj HTTPS adresi.
 - **Testovi:** `flutter test` mora biti zelen prije svakog commita.
-  Trenutno 76 testova; ako mijenjaš `ProxyAuthService`, ažuriraj
+  Trenutno 96 testova; ako mijenjaš `ProxyAuthService`, ažuriraj
   `test/services/proxy_auth_service_test.dart`.
 - **Commit poruke:** conventional (`feat:`, `fix:`, `refactor:`,
   `docs:`, `test:`, `build:`). Engleski. Kratak naslov, body objašnjava

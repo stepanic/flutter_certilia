@@ -11,6 +11,7 @@ import 'models/certilia_config.dart';
 import 'models/certilia_extended_info.dart';
 import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
+import 'refresh_errors.dart';
 import 'services/certilia_logger.dart';
 import 'services/token_storage_service.dart';
 
@@ -112,8 +113,10 @@ class CertiliaStatefulWrapper {
       } on CertiliaException catch (e) {
         // Certilia currently refuses refresh for portal clients, so in direct
         // mode every session ends here when the access token expires. End it
-        // cleanly instead of throwing at the caller.
-        _logger.log('Refresh failed, logging out: $e');
+        // cleanly instead of throwing at the caller. A timeout or outage
+        // keeps the session, so a later call can still refresh it.
+        if (!refreshWasRefused(e)) rethrow;
+        _logger.log('Refresh refused, logging out: $e');
         await logout();
         return null;
       }
@@ -141,10 +144,12 @@ class CertiliaStatefulWrapper {
     final tokenData = await _client.refreshToken(
       accessToken: _currentToken!.accessToken,
       refreshToken: _currentToken!.refreshToken!,
+      idToken: _currentToken!.idToken,
     );
     _currentToken = _tokenFromResponse(
       tokenData,
       fallbackRefreshToken: _currentToken!.refreshToken,
+      fallbackIdToken: _currentToken!.idToken,
     );
     await _tokenStorage.saveToken(_currentToken!);
     _logger.log('Token saved to secure storage');
@@ -166,14 +171,15 @@ class CertiliaStatefulWrapper {
         if (_currentToken!.refreshToken != null) {
           try {
             await refreshToken();
-            return await _client.getExtendedUserInfo(
-              _currentToken!.accessToken,
-              idToken: _currentToken!.idToken,
-            );
-          } catch (_) {
+          } catch (e) {
+            if (!refreshWasRefused(e)) rethrow;
             await logout();
             return null;
           }
+          return await _client.getExtendedUserInfo(
+            _currentToken!.accessToken,
+            idToken: _currentToken!.idToken,
+          );
         }
       }
       rethrow;
@@ -221,13 +227,14 @@ class CertiliaStatefulWrapper {
   CertiliaToken _tokenFromResponse(
     Map<String, dynamic> data, {
     String? fallbackRefreshToken,
+    String? fallbackIdToken,
   }) {
     final expiresIn = data['expiresIn'];
     return CertiliaToken(
       accessToken: data['accessToken'] as String,
       refreshToken:
           (data['refreshToken'] as String?) ?? fallbackRefreshToken,
-      idToken: data['idToken'] as String?,
+      idToken: (data['idToken'] as String?) ?? fallbackIdToken,
       expiresAt: expiresIn != null
           ? DateTime.now().add(Duration(seconds: expiresIn as int))
           : null,

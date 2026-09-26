@@ -52,7 +52,9 @@ class CertiliaConfig {
     this.direct,
   });
 
-  void validate() {
+  /// Throws [ArgumentError] when the configuration cannot work. [isWeb]
+  /// selects the web rules; tests pass it explicitly.
+  void validate({bool isWeb = kIsWeb}) {
     if (direct == null) {
       if (serverUrl.isEmpty) {
         throw ArgumentError('serverUrl cannot be empty');
@@ -80,6 +82,12 @@ class CertiliaConfig {
       }
       if (uri.scheme == 'http' && uri.host != 'localhost') {
         throw ArgumentError('callbackUrl must use https or a custom scheme');
+      }
+      // On web the callback is a page the popup loads on the app's origin;
+      // a custom scheme can never reach it.
+      if (isWeb && uri.scheme != 'https' && uri.scheme != 'http') {
+        throw ArgumentError(
+            'on web, callbackUrl must be a page on the app\'s origin');
       }
     }
   }

@@ -40,9 +40,13 @@ class ProxyAuthService implements CertiliaAuthBackend {
   })  : _httpClient = httpClient ?? http.Client(),
         _logger = logger;
 
-  /// The proxy's own callback, used when the app does not receive the
-  /// redirect itself (WebView and popup+polling flows).
-  String get proxyCallbackUrl => '$serverUrl/api/auth/callback';
+  /// The callback of the proxy at [serverUrl], used when the app does not
+  /// receive the redirect itself (WebView and popup+polling flows).
+  static String callbackUrlFor(String serverUrl) =>
+      '$serverUrl/api/auth/callback';
+
+  /// [callbackUrlFor] this proxy.
+  String get proxyCallbackUrl => callbackUrlFor(serverUrl);
 
   /// GET /api/auth/initialize: returns `authorization_url`, `state`, `session_id`.
   ///
@@ -175,10 +179,12 @@ class ProxyAuthService implements CertiliaAuthBackend {
   /// Both tokens travel in the JSON body. Earlier versions of this SDK put
   /// the access token in the Authorization header; the server still accepts
   /// that for backward compatibility but new code should use the body path.
+  /// [idToken] is not sent: the proxy keeps Certilia's tokens itself.
   @override
   Future<Map<String, dynamic>> refresh({
     required String accessToken,
     required String refreshToken,
+    String? idToken,
   }) async {
     final response = await _httpClient
         .post(

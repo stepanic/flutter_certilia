@@ -289,8 +289,10 @@ Refresh: Certilia currently answers refresh requests for portal clients
 with `invalid_grant` ("Persisted access token data not found"), from a
 server and from a browser alike. The user logs in again when the access
 token expires: `getCurrentUser()` then clears the session and returns
-null. (The proxy's `/api/auth/refresh` only re-signs its own JWT
-and never asks Certilia.)
+null. A refresh that times out or meets a server error is not a refusal:
+the session stays and the error reaches the caller, so a later call can
+refresh again. (The proxy's `/api/auth/refresh` only re-signs its own
+JWT and never asks Certilia.)
 
 Tested with real logins: in Chrome with
 [`example/web/serverless_login.html`](example/web/serverless_login.html)

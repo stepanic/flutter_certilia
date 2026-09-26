@@ -152,10 +152,15 @@ class DirectAuthService implements CertiliaAuthBackend {
   /// Certilia currently answers refresh requests for portal clients with
   /// `invalid_grant` ("Persisted access token data not found"), from a
   /// server as well as from a browser; the error reaches the caller.
+  ///
+  /// A refreshed ID token is verified before it is returned, because
+  /// [fetchUserInfo] and [fetchExtendedInfo] trust the stored one. Without
+  /// a new ID token the bundle keeps [idToken].
   @override
   Future<Map<String, dynamic>> refresh({
     required String accessToken,
     required String refreshToken,
+    String? idToken,
   }) async {
     final tokens = await _tokenRequest({
       'grant_type': 'refresh_token',
@@ -163,6 +168,12 @@ class DirectAuthService implements CertiliaAuthBackend {
     }, 'refresh');
     final bundle = _bundle(tokens);
     bundle['refreshToken'] ??= refreshToken;
+    final refreshedIdToken = tokens['id_token'] as String?;
+    if (refreshedIdToken == null) {
+      bundle['idToken'] = idToken;
+    } else {
+      await _verifyRefreshedIdToken(refreshedIdToken, loginIdToken: idToken);
+    }
     return bundle;
   }
 
@@ -189,13 +200,41 @@ class DirectAuthService implements CertiliaAuthBackend {
   @override
   void close() => _http.close();
 
-  /// Verifies [idToken] and returns its claims.
+  /// Verifies the ID token of a login and returns its claims.
   ///
   /// Checks the RS256 signature against Certilia's JWKS, `iss`, that `aud`
   /// contains the client id, `exp` (with two minutes of clock skew) and
   /// [nonce].
   Future<Map<String, dynamic>> verifyIdToken(String idToken,
       {required String nonce}) async {
+    final claims = await _verifySignedClaims(idToken);
+    if (claims['nonce'] != nonce) throw _invalidToken('nonce mismatch');
+    return claims;
+  }
+
+  /// Verifies an ID token from a refresh response the way OpenID Connect
+  /// Core 12.2 asks: the checks of [verifyIdToken] except the nonce, the
+  /// same `sub` as [loginIdToken], and a `nonce`, if present, equal to
+  /// [loginIdToken]'s. Without [loginIdToken] there is nothing to compare
+  /// against, so the refreshed token must not carry a nonce.
+  Future<Map<String, dynamic>> _verifyRefreshedIdToken(String idToken,
+      {String? loginIdToken}) async {
+    final claims = await _verifySignedClaims(idToken);
+    final login = loginIdToken == null
+        ? const <String, dynamic>{}
+        : _storedClaims(loginIdToken);
+    if (loginIdToken != null && claims['sub'] != login['sub']) {
+      throw _invalidToken('subject changed on refresh');
+    }
+    if (claims.containsKey('nonce') && claims['nonce'] != login['nonce']) {
+      throw _invalidToken('nonce mismatch');
+    }
+    return claims;
+  }
+
+  /// Checks signature, `iss`, `aud` and `exp` of [idToken] and returns its
+  /// claims.
+  Future<Map<String, dynamic>> _verifySignedClaims(String idToken) async {
     final parts = idToken.split('.');
     if (parts.length != 3) throw _invalidToken('not a JWT');
     final Map<String, dynamic> header;
@@ -238,7 +277,6 @@ class DirectAuthService implements CertiliaAuthBackend {
             .isBefore(_now())) {
       throw _invalidToken('expired');
     }
-    if (claims['nonce'] != nonce) throw _invalidToken('nonce mismatch');
     return claims;
   }
 
@@ -266,10 +304,19 @@ class DirectAuthService implements CertiliaAuthBackend {
       body = {};
     }
     if (response.statusCode != 200) {
+      final error = body['error'] as String?;
+      // An OAuth error response means Certilia refused the request; anything
+      // else (a 5xx, a proxy's HTML page) is an outage worth retrying.
+      if (error == null) {
+        throw CertiliaNetworkException(
+          message: 'Certilia token $op failed',
+          statusCode: response.statusCode,
+        );
+      }
       throw CertiliaAuthenticationException(
         message: (body['error_description'] as String?) ??
             'Certilia token $op failed',
-        code: body['error'] as String?,
+        code: error,
         details: 'HTTP ${response.statusCode}',
       );
     }

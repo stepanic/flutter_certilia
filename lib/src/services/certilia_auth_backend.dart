@@ -25,9 +25,12 @@ abstract class CertiliaAuthBackend {
     required String sessionId,
   });
 
+  /// Refreshes the tokens. [idToken] is the stored ID token of the login;
+  /// the direct backend checks a refreshed ID token against it.
   Future<Map<String, dynamic>> refresh({
     required String accessToken,
     required String refreshToken,
+    String? idToken,
   });
 
   /// Basic profile. [idToken] is the stored ID token; the direct backend

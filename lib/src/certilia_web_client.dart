@@ -13,6 +13,7 @@ import 'models/certilia_extended_info.dart';
 import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
 import 'oauth_callback.dart';
+import 'refresh_errors.dart';
 import 'services/certilia_logger.dart';
 import 'services/auth_backend_factory.dart';
 import 'services/certilia_auth_backend.dart';
@@ -76,6 +77,11 @@ class CertiliaWebClient {
             ),
         _tokenStorage = tokenStorage ?? TokenStorageService() {
     config.validate();
+    if (config.callbackUrl == null && _backend is! ProxyAuthService) {
+      throw ArgumentError(
+          'Without a callbackUrl the web client polls certilia-server, '
+          'so its backend must be a ProxyAuthService');
+    }
     _ready = _initializeTokens();
   }
 
@@ -124,8 +130,8 @@ class CertiliaWebClient {
           expectedState: authData['state'] as String,
         );
       } else {
-        // Polling needs the proxy: config.validate() rejects direct mode
-        // without a callbackUrl.
+        // Polling needs the proxy; the constructor rejects any other
+        // backend without a callbackUrl.
         final proxy = _backend as ProxyAuthService;
         authData = await proxy.initialize();
         final polling = await proxy.startPollingSession(
@@ -133,6 +139,7 @@ class CertiliaWebClient {
           sessionId: authData['session_id'] as String,
         );
         final polledCode = await _openAuthPopupWithPolling(
+          proxy: proxy,
           popup: popup,
           authorizationUrl: authData['authorization_url'] as String,
           pollingId: polling['polling_id'] as String,
@@ -193,6 +200,21 @@ class CertiliaWebClient {
     return popup;
   }
 
+  /// Sends [popup] to [authorizationUrl]. Returns false when the user has
+  /// already closed it, which happens while the popup is still blank during
+  /// the proxy round trip. Until the popup leaves the app's origin,
+  /// `popup.closed` is reliable even under COOP, and afterwards
+  /// [_watchForUserClose] cannot tell this close from COOP cutting the
+  /// reference, so it has to be caught here.
+  bool _sendPopup(web.Window popup, String authorizationUrl) {
+    if (popup.closed) {
+      _logger.log('Popup closed before it was sent to Certilia');
+      return false;
+    }
+    popup.location.href = authorizationUrl;
+    return true;
+  }
+
   void _closePopup(web.Window popup) {
     try {
       popup.close();
@@ -241,7 +263,8 @@ class CertiliaWebClient {
   }) async {
     final completer = Completer<Uri?>();
     _logger.log('Sending popup to Certilia, callback page: ${config.callbackUrl}');
-    popup.location.href = authorizationUrl;
+    if (!_sendPopup(popup, authorizationUrl)) return null;
+    final expected = Uri.parse(config.callbackUrl!);
 
     // Accept only a callback for this login: same callback page, our state,
     // written in the last 10 minutes. Results of another tab's login are
@@ -260,8 +283,14 @@ class CertiliaWebClient {
       } catch (_) {
         return;
       }
-      final expected = Uri.parse(config.callbackUrl!);
-      if (url.origin != expected.origin || url.path != expected.path) return;
+      // Compared part by part: Uri.origin throws for non-http(s) URLs, and
+      // anything on the channel can post one.
+      if (url.scheme != expected.scheme ||
+          url.host != expected.host ||
+          url.port != expected.port ||
+          url.path != expected.path) {
+        return;
+      }
       if (url.queryParameters['state'] != state) return;
       _logger.log('Callback page reported the result via $via');
       try {
@@ -323,6 +352,7 @@ class CertiliaWebClient {
   }
 
   Future<String?> _openAuthPopupWithPolling({
+    required ProxyAuthService proxy,
     required web.Window popup,
     required String authorizationUrl,
     required String pollingId,
@@ -330,7 +360,7 @@ class CertiliaWebClient {
     final completer = Completer<String?>();
 
     _logger.log('Sending popup to Certilia, polling id: $pollingId');
-    popup.location.href = authorizationUrl;
+    if (!_sendPopup(popup, authorizationUrl)) return null;
 
     Timer? pollTimer;
     Timer? popupCheckTimer;
@@ -363,7 +393,7 @@ class CertiliaWebClient {
     pollTimer = Timer.periodic(_pollingInterval, (_) async {
       if (!active) return;
       try {
-        final data = await (_backend as ProxyAuthService).pollStatus(pollingId);
+        final data = await proxy.pollStatus(pollingId);
         if (data == null) {
           // Session expired or not found.
           cleanup();
@@ -442,17 +472,20 @@ class CertiliaWebClient {
       final tokenData = await _backend.refresh(
         accessToken: _currentToken!.accessToken,
         refreshToken: _currentToken!.refreshToken!,
+        idToken: _currentToken!.idToken,
       );
       _currentToken = _tokenFromResponse(
         tokenData,
         fallbackRefreshToken: _currentToken!.refreshToken,
+        fallbackIdToken: _currentToken!.idToken,
       );
       await _tokenStorage.saveToken(_currentToken!);
       _logger.log('Token refreshed successfully');
     } catch (e) {
       _logger.log('Token refresh failed: $e');
       if (e is CertiliaException) rethrow;
-      throw CertiliaAuthenticationException(
+      // Not a refusal (see refreshWasRefused): the session stays.
+      throw CertiliaException(
         message: 'Failed to refresh token',
         details: e.toString(),
       );
@@ -466,8 +499,9 @@ class CertiliaWebClient {
     await _tokenStorage.deleteToken();
   }
 
-  /// Returns extended user info. Auto-refreshes once on 401, auto-logs-out
-  /// if refresh fails.
+  /// Returns extended user info. Refreshes once on 401/502 and logs out
+  /// when the refresh is refused (see `refreshWasRefused`); other refresh
+  /// failures are rethrown and keep the session.
   Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
     await _ready;
     if (_currentToken == null || _currentToken!.isExpired) {
@@ -488,15 +522,16 @@ class CertiliaWebClient {
     }
     try {
       await refreshToken();
-      return await _backend.fetchExtendedInfo(
-        _currentToken!.accessToken,
-        idToken: _currentToken!.idToken,
-      );
     } catch (e) {
-      _logger.log('Refresh failed, clearing authentication: $e');
+      if (!refreshWasRefused(e)) rethrow;
+      _logger.log('Refresh refused, clearing authentication: $e');
       await logout();
       return null;
     }
+    return await _backend.fetchExtendedInfo(
+      _currentToken!.accessToken,
+      idToken: _currentToken!.idToken,
+    );
   }
 
   String? get currentAccessToken => _currentToken?.accessToken;
@@ -509,13 +544,14 @@ class CertiliaWebClient {
   CertiliaToken _tokenFromResponse(
     Map<String, dynamic> data, {
     String? fallbackRefreshToken,
+    String? fallbackIdToken,
   }) {
     final expiresIn = data['expiresIn'];
     return CertiliaToken(
       accessToken: data['accessToken'] as String,
       refreshToken:
           (data['refreshToken'] as String?) ?? fallbackRefreshToken,
-      idToken: data['idToken'] as String?,
+      idToken: (data['idToken'] as String?) ?? fallbackIdToken,
       expiresAt: expiresIn != null
           ? DateTime.now().add(Duration(seconds: expiresIn as int))
           : null,

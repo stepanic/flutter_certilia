@@ -279,6 +279,91 @@ void main() {
     });
   });
 
+  group('DirectAuthService.refresh', () {
+    DirectAuthService refreshing(Map<String, dynamic> response,
+            {int status = 200}) =>
+        DirectAuthService(
+          client: _client,
+          scopes: const ['openid'],
+          logger: CertiliaLogger(componentName: 'test', enableLogging: false),
+          httpClient: MockClient((request) async {
+            if (request.url.path == '/oauth2/jwks') {
+              return http.Response(
+                jsonEncode({
+                  'keys': [
+                    {
+                      'kty': 'RSA',
+                      'kid': 'k1',
+                      'n': _b64(_bytes(_certiliaKey.publicKey.modulus!)),
+                      'e': _b64(_bytes(_certiliaKey.publicKey.exponent!)),
+                    }
+                  ]
+                }),
+                200,
+              );
+            }
+            return http.Response(jsonEncode(response), status);
+          }),
+          now: () => _now,
+        );
+
+    final loginIdToken = _sign(_claims(nonce: 'login-nonce'));
+
+    test('keeps the login ID token when the response has none', () async {
+      final bundle = await refreshing({'access_token': 'at-2'}).refresh(
+          accessToken: 'at', refreshToken: 'rt', idToken: loginIdToken);
+      expect(bundle['accessToken'], 'at-2');
+      expect(bundle['idToken'], loginIdToken);
+      expect(bundle['refreshToken'], 'rt');
+    });
+
+    test('accepts a refreshed ID token of the same subject without nonce',
+        () async {
+      final refreshed = _sign(_claims(nonce: '')..remove('nonce'));
+      final bundle = await refreshing(
+              {'access_token': 'at-2', 'id_token': refreshed})
+          .refresh(accessToken: 'at', refreshToken: 'rt', idToken: loginIdToken);
+      expect(bundle['idToken'], refreshed);
+    });
+
+    test('rejects a refreshed ID token with a bad signature', () {
+      final forged =
+          _sign(_claims(nonce: 'login-nonce'), key: _otherKey.privateKey);
+      expect(
+        refreshing({'access_token': 'at-2', 'id_token': forged}).refresh(
+            accessToken: 'at', refreshToken: 'rt', idToken: loginIdToken),
+        _rejected('bad signature'),
+      );
+    });
+
+    test('rejects a refreshed ID token for another subject', () {
+      final other = _sign({..._claims(nonce: 'login-nonce'), 'sub': 'user-2'});
+      expect(
+        refreshing({'access_token': 'at-2', 'id_token': other}).refresh(
+            accessToken: 'at', refreshToken: 'rt', idToken: loginIdToken),
+        _rejected('subject changed'),
+      );
+    });
+
+    test('rejects a refreshed ID token with another nonce', () {
+      final other = _sign(_claims(nonce: 'other-nonce'));
+      expect(
+        refreshing({'access_token': 'at-2', 'id_token': other}).refresh(
+            accessToken: 'at', refreshToken: 'rt', idToken: loginIdToken),
+        _rejected('nonce mismatch'),
+      );
+    });
+
+    test('reports a 5xx without an OAuth error as a network failure', () {
+      expect(
+        refreshing({}, status: 503)
+            .refresh(accessToken: 'at', refreshToken: 'rt'),
+        throwsA(isA<CertiliaNetworkException>()
+            .having((e) => e.statusCode, 'statusCode', 503)),
+      );
+    });
+  });
+
   group('DirectAuthService profile', () {
     test('user and extended info come from the stored ID token', () async {
       final fake = _FakeCertilia((n) => _sign(_claims(nonce: n)));

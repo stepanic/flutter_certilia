@@ -99,29 +99,36 @@ abstract class CertiliaNativeClient {
     }
   }
 
-  /// Refreshes tokens. Returns the new token bundle.
+  /// Refreshes tokens. Returns the new token bundle; it keeps [refreshToken]
+  /// and [idToken] when the response has no new ones.
+  ///
+  /// Errors other than [CertiliaException] (a dropped connection, say) are
+  /// reported as a plain [CertiliaException], which `refreshWasRefused`
+  /// does not count as the end of the session.
   Future<Map<String, dynamic>> refreshToken({
     required String accessToken,
     required String refreshToken,
+    String? idToken,
   }) async {
     try {
       logger.log('Refreshing token');
       final tokenData = await backend.refresh(
         accessToken: accessToken,
         refreshToken: refreshToken,
+        idToken: idToken,
       );
       logger.log('Token refreshed successfully');
       return {
         'accessToken': tokenData['accessToken'],
         'refreshToken': tokenData['refreshToken'] ?? refreshToken,
-        'idToken': tokenData['idToken'],
+        'idToken': tokenData['idToken'] ?? idToken,
         'expiresIn': tokenData['expiresIn'],
         'tokenType': tokenData['tokenType'] ?? 'Bearer',
       };
     } catch (e) {
       logger.log('Token refresh failed: $e');
       if (e is CertiliaException) rethrow;
-      throw CertiliaAuthenticationException(
+      throw CertiliaException(
         message: 'Failed to refresh token',
         details: e.toString(),
       );

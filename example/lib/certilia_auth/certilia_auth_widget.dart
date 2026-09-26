@@ -74,7 +74,13 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
       direct: widget.direct,
       scopes: widget.scopes,
       enableLogging: widget.enableLogging,
-    ).then((client) => _certilia = client);
+    ).then((client) => _certilia = client, onError: (Object e) {
+      // A configuration error (e.g. direct mode without an https
+      // callbackUrl). Show it now; the login button retries initialize().
+      debugPrint('❌ [CertiliaAuthWidget] SDK initialization failed: $e');
+      if (!mounted) return;
+      setState(() => _errorMessage = e.toString());
+    });
     _checkStoredAuthentication();
   }
 

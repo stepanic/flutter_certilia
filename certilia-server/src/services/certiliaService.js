@@ -164,17 +164,20 @@ class CertiliaService {
   /**
    * Refresh access token
    * @param {string} refreshToken - Refresh token
+   * @param {Object} client - Certilia client that issued the token (see
+   *   resolveClientById); a token can only be refreshed by its own client
    * @returns {Promise<Object>} Token response
    */
-  async refreshAccessToken(refreshToken) {
+  async refreshAccessToken(refreshToken, client) {
+    // Outside the try: a missing client is a programming error, not a
+    // Certilia failure.
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: client.clientId,
+      client_secret: client.clientSecret,
+      refresh_token: refreshToken,
+    });
     try {
-      const params = new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: config.certilia.clientId,
-        client_secret: config.certilia.clientSecret,
-        refresh_token: refreshToken,
-      });
-
       const response = await this.client.post(
         config.certilia.tokenEndpoint,
         params.toString(),
@@ -320,18 +323,21 @@ class CertiliaService {
   /**
    * Revoke token
    * @param {string} token - Token to revoke
+   * @param {Object} client - Certilia client that issued the token (see
+   *   resolveClientById)
    * @param {string} tokenType - Type of token (access_token or refresh_token)
    * @returns {Promise<void>}
    */
-  async revokeToken(token, tokenType = 'access_token') {
+  async revokeToken(token, client, tokenType = 'access_token') {
+    // Outside the try, which swallows Certilia's errors: a missing client
+    // must not be swallowed with them.
+    const params = new URLSearchParams({
+      token,
+      token_type_hint: tokenType,
+      client_id: client.clientId,
+      client_secret: client.clientSecret,
+    });
     try {
-      const params = new URLSearchParams({
-        token,
-        token_type_hint: tokenType,
-        client_id: config.certilia.clientId,
-        client_secret: config.certilia.clientSecret,
-      });
-
       await this.client.post(
         '/oauth2/revoke',
         params.toString(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'certilia_native_client.dart';
+import 'services/proxy_auth_service.dart';
 
 /// Mobile/desktop client that shows Certilia's login page in an in-app
 /// WebView and watches it for the proxy's own callback URL.
@@ -18,7 +19,7 @@ class CertiliaWebViewClient extends CertiliaNativeClient {
 
   /// The proxy's own callback: the WebView flow needs certilia-server.
   @override
-  String get redirectUri => '$serverUrl/api/auth/callback';
+  String get redirectUri => ProxyAuthService.callbackUrlFor(serverUrl);
 
   @override
   Future<Uri?> obtainCallback(BuildContext context, String authorizationUrl) {

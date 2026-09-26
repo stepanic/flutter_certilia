@@ -282,6 +282,18 @@ void main() {
       );
     });
 
+    test('on web, rejects a custom scheme', () {
+      const CertiliaConfig(serverUrl: _serverUrl, callbackUrl: _httpsCallback)
+          .validate(isWeb: true);
+      expect(
+        () => const CertiliaConfig(
+          serverUrl: _serverUrl,
+          callbackUrl: _customCallback,
+        ).validate(isWeb: true),
+        throwsArgumentError,
+      );
+    });
+
     test('rejects a relative URL', () {
       expect(
         () => const CertiliaConfig(serverUrl: _serverUrl, callbackUrl: '/cb')
