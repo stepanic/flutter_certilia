@@ -467,30 +467,25 @@ export const refreshToken = async (req, res, next) => {
       accessToken = tokenService.extractTokenFromHeader(req.headers.authorization);
     }
 
-    let certiliaTokens = null;
+    // The new access token carries the user's claims over from the old one.
+    // Its signature is checked first, and it must belong to the same user as
+    // the refresh token; otherwise anyone holding a refresh token could have
+    // arbitrary claims (name, OIB, certilia_tokens) signed.
+    let userData = { sub: decoded.sub };
     if (accessToken) {
-      try {
-        const accessDecoded = tokenService.decodeToken(accessToken);
-        certiliaTokens = accessDecoded.certilia_tokens;
-      } catch (e) {
-        logger.warn('Could not decode access token for certilia tokens');
+      const accessDecoded = tokenService.verifyExpiredAccessToken(accessToken);
+      if (accessDecoded.sub !== decoded.sub) {
+        throw new AuthenticationError('Access token belongs to another user');
       }
+      const { type, ...claims } = accessDecoded;
+      userData = claims;
     }
 
-    // Generate new token pair, preserving certilia tokens
-    const userData = {
-      sub: decoded.sub,
-    };
-    
-    if (certiliaTokens) {
-      userData.certilia_tokens = certiliaTokens;
-    }
-    
     const tokens = tokenService.generateTokenPair(userData);
 
-    logger.info('Token refreshed', { 
+    logger.info('Token refreshed', {
       userId: decoded.sub,
-      hasCertiliaTokens: !!certiliaTokens 
+      hasCertiliaTokens: !!userData.certilia_tokens,
     });
 
     res.json(tokens);
