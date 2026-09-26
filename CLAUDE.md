@@ -57,10 +57,10 @@ Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
 7. **Login potvrđuje push u Certilia aplikaciji**, pa WebView, Auth Tab,
    ASWebAuthenticationSession i popup rade jednako. Stranica na mobitelu
    nudi i gumb za otvaranje Certilia aplikacije (prebacivanje između
-   aplikacija), ali push radi i bez njega. Netestirano na mobitelu s
-   Certilia aplikacijom: sistemski browser takve linkove predaje
-   aplikaciji, a in-app WebView (`webview_flutter`) ih po defaultu ne
-   otvara, pa gumb tamo vjerojatno završi greškom.
+   aplikacija), ali push radi i bez njega. U Safariju na iOS-u gumb
+   otvara Certilia aplikaciju (testirano). In-app WebView
+   (`webview_flutter`) takve linkove po defaultu ne predaje drugim
+   aplikacijama, pa gumb tamo vjerojatno završi greškom (netestirano).
 8. **Android: bez `preferEphemeral`.** S njim flutter_web_auth_2 5.x na
    Chromeu < 141 otvara običan Custom Tab koji nakon redirecta ostaje
    iznad aplikacije. `CertiliaBrowserClient` ga šalje samo na iOS-u.
