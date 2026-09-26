@@ -25,12 +25,13 @@ flowchart LR
     B -.->|JWT, user| A
 ```
 
-The proxy exists because Certilia only issues confidential clients:
-its token endpoint answers `invalid_client` ("Unsupported Client
-Authentication Method!") to a code exchange without the client secret,
-and the developer portal offers no public (PKCE-only) client. The secret
-therefore has to stay on a server. The app can still receive the login
-redirect itself; see [Login flows](#login-flows).
+Certilia only issues confidential clients: its token endpoint answers
+`invalid_client` ("Unsupported Client Authentication Method!") to a code
+exchange without the client secret, and the developer portal offers no
+public (PKCE-only) client. The proxy keeps that secret on a server. The
+app can also skip the proxy and hold the client itself; see
+[Direct mode (no server)](#direct-mode-no-server). Either way the app can
+receive the login redirect itself; see [Login flows](#login-flows).
 
 The auth flow differs slightly by platform:
 
@@ -222,12 +223,64 @@ login, code exchange and refresh). Registering it works around the
 portal's stated rule, so prefer an https App Link / Universal Link where
 you can.
 
+## Direct mode (no server)
+
+```dart
+final certilia = await CertiliaSDK.initialize(
+  direct: const CertiliaDirectClient(
+    clientId: '...',
+    clientSecret: '...',
+  ),
+  callbackUrl: 'https://app.example/certilia_callback.html', // or an App Link
+);
+```
+
+The app runs the PKCE authorization code flow against `idp.certilia.com`
+itself and exchanges the code with the client secret; Certilia's token
+endpoint and signing keys allow cross-origin requests, so this works from
+a browser too. Before accepting the ID token the SDK checks its RS256
+signature against Certilia's JWKS, `iss`, `aud`, `exp` and `nonce`. The
+user profile comes from the ID token: Certilia's `userinfo` endpoint only
+answers requests that carry the token-binding cookie of the browser that
+logged in.
+
+**The client secret is then public.** Anyone can read it from the app
+bundle or the JavaScript. What still protects your users is the exact
+callback match and PKCE: Certilia sends the code only to the registered
+callback, and a code is useless without the PKCE verifier of the login
+that asked for it. Direct mode therefore requires an https callback (a
+page on your app's origin, an Android App Link, an iOS Universal Link):
+with a custom scheme, another app on the phone could receive the redirect
+and, holding your secret, complete the login. Someone with the secret can
+still start logins that show your service name on Certilia's page and
+spend your client's login quota. Check Certilia's terms before shipping a
+client secret; asking Certilia to make the client public (WSO2 supports
+clients without a secret; the portal does not offer it) avoids the
+question.
+
+If your own backend needs to trust the login, send it the ID token and
+verify it there against `https://idp.certilia.com/oauth2/jwks` (issuer
+`https://idp.certilia.com/oauth2/token`, audience = your client id). That
+needs no Certilia secret either.
+
+Refresh: Certilia currently answers refresh requests for portal clients
+with `invalid_grant` ("Persisted access token data not found"), from a
+server and from a browser alike. The user logs in again when the access
+token expires. (The proxy's `/api/auth/refresh` only re-signs its own JWT
+and never asks Certilia.)
+
+Tested with real logins: in Chrome with
+[`example/web/serverless_login.html`](example/web/serverless_login.html)
+(the same steps in plain JavaScript), and with the SDK on an Android 16
+emulator with an App Link callback; no request reached a server of ours.
+
 ## Public API
 
 | Symbol | Purpose |
 |---|---|
 | `CertiliaSDK.initialize(...)` | Build a platform-appropriate client |
-| `CertiliaConfig` | Configuration object (proxy URL, scopes, logging) |
+| `CertiliaConfig` | Configuration object (proxy URL or direct client, callback URL, scopes, logging) |
+| `CertiliaDirectClient` | Certilia client id/secret for [direct mode](#direct-mode-no-server) |
 | `CertiliaUser` | Basic user profile (`sub`, `firstName`, `lastName`, `oib`, `email`, ...) |
 | `CertiliaToken` | Access/refresh/ID tokens + expiry helpers |
 | `CertiliaExtendedInfo` | Full Certilia profile — any field the upstream returned |

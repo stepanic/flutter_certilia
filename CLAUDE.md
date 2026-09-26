@@ -9,9 +9,10 @@ samo stvarno stanje koda.
 ## Što ovo radi
 
 Flutter SDK za prijavu hrvatskom elektroničkom osobnom iskaznicom
-(eOsobna) preko Certilije / NIAS-a. Komunicira **isključivo** s
-backend proxyjem (`certilia-server/` u istom repu); proxy drži OAuth
-credentialse i razgovara s Certilia IDP-om.
+(eOsobna) preko Certilije / NIAS-a. Normalno komunicira s backend
+proxyjem (`certilia-server/` u istom repu) koji drži OAuth credentialse
+i razgovara s Certilia IDP-om; u direct modu (`CertiliaDirectClient`)
+aplikacija sama drži klijenta i razgovara izravno s Certilijom.
 
 ```mermaid
 flowchart LR
@@ -24,11 +25,16 @@ flowchart LR
 Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
 (WSO2 Identity Server):
 
-1. **Proxy je nužan zbog client secreta.** Certilia izdaje samo
+1. **Code exchange traži client secret.** Certilia izdaje samo
    povjerljive (confidential) klijente: token endpoint bez secreta vraća
    `invalid_client` ("Unsupported Client Authentication Method!"), a
-   developer portal ne nudi javni PKCE klijent. Zato code exchange
-   uvijek ide kroz `certilia-server`. Ovo je jedino stvarno ograničenje.
+   developer portal ne nudi javni PKCE klijent. Secret drži ili
+   `certilia-server`, ili sama aplikacija u direct modu
+   (`CertiliaDirectClient`): token endpoint i JWKS dopuštaju
+   cross-origin pozive, pa login radi i bez ikakvog servera. U direct
+   modu secret je javan; štite exact-match callback i PKCE, zato direct
+   mode traži https callback. Implicit (`response_type=id_token`) je za
+   portal klijente isključen (`unauthorized_client`).
 2. **Jedan callback URL po klijentu, točno podudaranje.** Svaki tok s
    vlastitim callbackom treba vlastiti Certilia klijent; proxy ih bira
    po `redirect_uri` (`CERTILIA_CLIENTS`).
@@ -56,6 +62,10 @@ Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
    iznad aplikacije. `CertiliaBrowserClient` ga šalje samo na iOS-u.
    Provjereno na Android 16 emulatoru (Chrome 133) pravim loginom i
    lažnim proxyjem.
+9. **Refresh kod Certilije ne radi** za portal klijente
+   (`invalid_grant`, "Persisted access token data not found"), ni sa
+   servera ni iz browsera. `/api/auth/refresh` proxyja samo ponovno
+   potpisuje svoj JWT i Certiliju ne zove.
 
 Stara lista "odbačenih pristupa" iz `REFACTOR_PLAN.md` navodila je
 razloge koji nisu bili provjereni; tamo je tablica ažurirana.
@@ -76,11 +86,15 @@ lib/
     oauth_callback.dart                    # parsiranje callback URL-a, provjera state-a
     certilia_stateful_wrapper.dart         # mobile/desktop: state management
     services/
+      certilia_auth_backend.dart           # sučelje: initialize/exchange/refresh/profil
+      auth_backend_factory.dart            # proxy ili direct prema konfiguraciji
       proxy_auth_service.dart              # **sve** HTTP komunikacije s proxyjem
+      direct_auth_service.dart             # direct mode: Certilia izravno, PKCE, provjera ID tokena
       token_storage_service.dart           # FlutterSecureStorage wrapper
       certilia_logger.dart                 # logging
     models/
       certilia_config.dart                 # konfiguracija
+      certilia_direct_client.dart          # client id/secret za direct mode
       certilia_user.dart                   # osnovni profil
       certilia_token.dart                  # access/refresh/ID tokeni
       certilia_extended_info.dart          # puni profil
@@ -207,7 +221,8 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
 
 ## Konvencije
 
-- Sve HTTP komunikacije idu kroz `ProxyAuthService`. Ne dodaj direktan
+- Sve HTTP komunikacije idu kroz `CertiliaAuthBackend`
+  (`ProxyAuthService` ili `DirectAuthService`). Ne dodaj direktan
   `http.get/post` u klijente — zaobilazi retry/timeout/error policy.
 - Sva token persistencija ide kroz `TokenStorageService`. Ne pristupaj
   `FlutterSecureStorage` direktno (cache key konzistentnost).
@@ -232,7 +247,7 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
   `certilia-server/`. Mora postojati ngrok tunel za auth callback na
   javnoj HTTPS adresi.
 - **Testovi:** `flutter test` mora biti zelen prije svakog commita.
-  Trenutno 59 testova; ako mijenjaš `ProxyAuthService`, ažuriraj
+  Trenutno 76 testova; ako mijenjaš `ProxyAuthService`, ažuriraj
   `test/services/proxy_auth_service_test.dart`.
 - **Commit poruke:** conventional (`feat:`, `fix:`, `refactor:`,
   `docs:`, `test:`, `build:`). Engleski. Kratak naslov, body objašnjava
