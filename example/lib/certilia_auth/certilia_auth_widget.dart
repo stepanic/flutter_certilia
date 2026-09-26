@@ -27,6 +27,9 @@ class CertiliaAuthWidget extends StatefulWidget {
   /// See `CertiliaConfig.callbackUrl`. Null keeps the WebView (mobile) and
   /// popup+polling (web) flows.
   final String? callbackUrl;
+
+  /// Certilia client used without the proxy; see `CertiliaDirectClient`.
+  final CertiliaDirectClient? direct;
   final List<String> scopes;
   final VoidCallback? onThemeToggle;
   final bool enableLogging;
@@ -35,6 +38,7 @@ class CertiliaAuthWidget extends StatefulWidget {
     super.key,
     required this.serverUrl,
     this.callbackUrl,
+    this.direct,
     this.scopes = const ['openid', 'profile', 'eid', 'email', 'offline_access'],
     this.onThemeToggle,
     this.enableLogging = false,
@@ -67,6 +71,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
     CertiliaSDK.initialize(
       serverUrl: widget.serverUrl,
       callbackUrl: widget.callbackUrl,
+      direct: widget.direct,
       scopes: widget.scopes,
       enableLogging: widget.enableLogging,
     ).then((client) => _certilia = client);
@@ -129,6 +134,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
         certilia = await CertiliaSDK.initialize(
           serverUrl: widget.serverUrl,
           callbackUrl: widget.callbackUrl,
+        direct: widget.direct,
           scopes: widget.scopes,
           enableLogging: widget.enableLogging,
         );
@@ -220,6 +226,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
         callbackUrl: widget.callbackUrl,
+        direct: widget.direct,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
       );
@@ -260,6 +267,7 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
         callbackUrl: widget.callbackUrl,
+        direct: widget.direct,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
       );

@@ -14,6 +14,8 @@ import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
 import 'oauth_callback.dart';
 import 'services/certilia_logger.dart';
+import 'services/auth_backend_factory.dart';
+import 'services/certilia_auth_backend.dart';
 import 'services/proxy_auth_service.dart';
 import 'services/token_storage_service.dart';
 
@@ -30,13 +32,13 @@ import 'services/token_storage_service.dart';
 ///   `Cross-Origin-Opener-Policy` has cut the popup off from its opener,
 ///   which is why neither flow uses `window.opener` or `postMessage`.
 ///
-/// HTTP communication lives in [ProxyAuthService]; token persistence in
+/// HTTP communication lives in the [CertiliaAuthBackend]; token persistence in
 /// [TokenStorageService]. This class owns popup window lifecycle and
 /// in-memory session state.
 class CertiliaWebClient {
   final CertiliaConfig config;
   final String serverUrl;
-  final ProxyAuthService _proxy;
+  final CertiliaAuthBackend _backend;
   final TokenStorageService _tokenStorage;
   final CertiliaLogger _logger;
 
@@ -60,19 +62,17 @@ class CertiliaWebClient {
   CertiliaWebClient({
     required this.config,
     required this.serverUrl,
-    ProxyAuthService? proxyService,
+    CertiliaAuthBackend? backend,
     TokenStorageService? tokenStorage,
   })  : _logger = CertiliaLogger(
           componentName: 'CertiliaWebClient',
           enableLogging: config.enableLogging,
         ),
-        _proxy = proxyService ??
-            ProxyAuthService(
+        _backend = backend ??
+            createAuthBackend(
+              config: config,
               serverUrl: serverUrl,
-              logger: CertiliaLogger(
-                componentName: 'CertiliaWebClient.proxy',
-                enableLogging: config.enableLogging,
-              ),
+              componentName: 'CertiliaWebClient',
             ),
         _tokenStorage = tokenStorage ?? TokenStorageService() {
     config.validate();
@@ -113,7 +113,7 @@ class CertiliaWebClient {
       final String code;
       final Map<String, dynamic> authData;
       if (config.callbackUrl != null) {
-        authData = await _proxy.initialize(redirectUri: config.callbackUrl);
+        authData = await _backend.initialize(redirectUri: config.callbackUrl);
         final callback = await _openAuthPopupWithCallbackPage(
           popup: popup,
           authorizationUrl: authData['authorization_url'] as String,
@@ -124,8 +124,11 @@ class CertiliaWebClient {
           expectedState: authData['state'] as String,
         );
       } else {
-        authData = await _proxy.initialize();
-        final polling = await _proxy.startPollingSession(
+        // Polling needs the proxy: config.validate() rejects direct mode
+        // without a callbackUrl.
+        final proxy = _backend as ProxyAuthService;
+        authData = await proxy.initialize();
+        final polling = await proxy.startPollingSession(
           state: authData['state'] as String,
           sessionId: authData['session_id'] as String,
         );
@@ -142,7 +145,7 @@ class CertiliaWebClient {
         code = polledCode;
       }
 
-      final tokenData = await _proxy.exchange(
+      final tokenData = await _backend.exchange(
         code: code,
         state: authData['state'] as String,
         sessionId: authData['session_id'] as String,
@@ -153,7 +156,10 @@ class CertiliaWebClient {
 
       final user = tokenData['user'] != null
           ? CertiliaUser.fromJson(tokenData['user'] as Map<String, dynamic>)
-          : await _proxy.fetchUserInfo(_currentToken!.accessToken);
+          : await _backend.fetchUserInfo(
+              _currentToken!.accessToken,
+              idToken: _currentToken!.idToken,
+            );
 
       _logger.log('Authentication successful for user: ${user.sub}');
       return user;
@@ -357,7 +363,7 @@ class CertiliaWebClient {
     pollTimer = Timer.periodic(_pollingInterval, (_) async {
       if (!active) return;
       try {
-        final data = await _proxy.pollStatus(pollingId);
+        final data = await (_backend as ProxyAuthService).pollStatus(pollingId);
         if (data == null) {
           // Session expired or not found.
           cleanup();
@@ -415,7 +421,10 @@ class CertiliaWebClient {
         await refreshToken();
       }
 
-      return await _proxy.fetchUserInfo(_currentToken!.accessToken);
+      return await _backend.fetchUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     } catch (e) {
       _logger.log('Failed to get current user: $e');
       return null;
@@ -430,7 +439,7 @@ class CertiliaWebClient {
     }
     try {
       _logger.log('Refreshing token');
-      final tokenData = await _proxy.refresh(
+      final tokenData = await _backend.refresh(
         accessToken: _currentToken!.accessToken,
         refreshToken: _currentToken!.refreshToken!,
       );
@@ -466,7 +475,10 @@ class CertiliaWebClient {
       return null;
     }
 
-    final info = await _proxy.fetchExtendedInfo(_currentToken!.accessToken);
+    final info = await _backend.fetchExtendedInfo(
+      _currentToken!.accessToken,
+      idToken: _currentToken!.idToken,
+    );
     if (info != null) return info;
 
     // 401/502 — try to refresh once.
@@ -476,7 +488,10 @@ class CertiliaWebClient {
     }
     try {
       await refreshToken();
-      return await _proxy.fetchExtendedInfo(_currentToken!.accessToken);
+      return await _backend.fetchExtendedInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     } catch (e) {
       _logger.log('Refresh failed, clearing authentication: $e');
       await logout();
@@ -489,7 +504,7 @@ class CertiliaWebClient {
   String? get currentIdToken => _currentToken?.idToken;
   DateTime? get tokenExpiry => _currentToken?.expiresAt;
 
-  void dispose() => _proxy.close();
+  void dispose() => _backend.close();
 
   CertiliaToken _tokenFromResponse(
     Map<String, dynamic> data, {

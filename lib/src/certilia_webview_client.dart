@@ -13,11 +13,12 @@ class CertiliaWebViewClient extends CertiliaNativeClient {
   CertiliaWebViewClient({
     required super.config,
     required super.serverUrl,
-    super.proxyService,
+    super.backend,
   }) : super(componentName: 'CertiliaWebViewClient');
 
+  /// The proxy's own callback: the WebView flow needs certilia-server.
   @override
-  String get redirectUri => proxy.proxyCallbackUrl;
+  String get redirectUri => '$serverUrl/api/auth/callback';
 
   @override
   Future<Uri?> obtainCallback(BuildContext context, String authorizationUrl) {

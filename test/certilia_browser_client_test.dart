@@ -88,7 +88,7 @@ CertiliaBrowserClient _client(
     CertiliaBrowserClient(
       config: CertiliaConfig(serverUrl: _serverUrl, callbackUrl: callbackUrl),
       serverUrl: _serverUrl,
-      proxyService: proxy.service,
+      backend: proxy.service,
       launcher: launcher.call,
     );
 
@@ -216,7 +216,7 @@ void main() {
               preferEphemeralSession: true,
             ),
             serverUrl: _serverUrl,
-            proxyService: proxy.service,
+            backend: proxy.service,
             launcher: launcher.call,
           ).authenticate(context);
           return launcher.options!.preferEphemeral;

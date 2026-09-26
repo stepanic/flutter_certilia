@@ -81,7 +81,10 @@ class CertiliaStatefulWrapper {
       _currentUser =
           CertiliaUser.fromJson(authData['user'] as Map<String, dynamic>);
     } else {
-      _currentUser = await _client.getUserInfo(_currentToken!.accessToken);
+      _currentUser = await _client.getUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     }
     if (_currentUser != null) {
       await _saveUser(_currentUser!);
@@ -109,7 +112,10 @@ class CertiliaStatefulWrapper {
 
     if (_currentUser != null) return _currentUser;
 
-    _currentUser = await _client.getUserInfo(_currentToken!.accessToken);
+    _currentUser = await _client.getUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     if (_currentUser != null) {
       await _saveUser(_currentUser!);
     }
@@ -140,7 +146,10 @@ class CertiliaStatefulWrapper {
     if (_currentToken == null || _currentToken!.isExpired) return null;
 
     try {
-      return await _client.getExtendedUserInfo(_currentToken!.accessToken);
+      return await _client.getExtendedUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     } catch (e) {
       // Refresh once on 401/expired errors, then retry.
       final msg = e.toString();
@@ -148,8 +157,10 @@ class CertiliaStatefulWrapper {
         if (_currentToken!.refreshToken != null) {
           try {
             await refreshToken();
-            return await _client
-                .getExtendedUserInfo(_currentToken!.accessToken);
+            return await _client.getExtendedUserInfo(
+              _currentToken!.accessToken,
+              idToken: _currentToken!.idToken,
+            );
           } catch (_) {
             await logout();
             return null;

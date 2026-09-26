@@ -1,15 +1,21 @@
 import 'package:flutter/foundation.dart';
 
+import 'certilia_direct_client.dart';
+
 /// Configuration for the Flutter Certilia SDK.
 ///
-/// The SDK uses a proxy-server architecture: the Flutter client talks only
-/// to your backend (the `certilia-server`), which mediates all OAuth
-/// communication with Certilia. The only required value here is the URL of
-/// that proxy.
+/// Normally the SDK talks to your backend proxy (`certilia-server`), which
+/// holds the Certilia client secret; then [serverUrl] is the only required
+/// value. With [direct] set, the SDK talks to Certilia itself and needs no
+/// server; see [CertiliaDirectClient] for what that exposes.
 @immutable
 class CertiliaConfig {
-  /// Backend proxy server URL.
+  /// Backend proxy server URL. Empty in direct mode.
   final String serverUrl;
+
+  /// Certilia client used directly, without the proxy. Requires an https
+  /// [callbackUrl].
+  final CertiliaDirectClient? direct;
 
   /// OAuth scopes the proxy should request. The proxy server is free to
   /// override or extend this list.
@@ -43,14 +49,26 @@ class CertiliaConfig {
     this.preferEphemeralSession = true,
     this.enableLogging = false,
     this.callbackUrl,
+    this.direct,
   });
 
   void validate() {
-    if (serverUrl.isEmpty) {
-      throw ArgumentError('serverUrl cannot be empty');
-    }
-    if (!serverUrl.startsWith('http')) {
-      throw ArgumentError('serverUrl must be a valid HTTP(S) URL');
+    if (direct == null) {
+      if (serverUrl.isEmpty) {
+        throw ArgumentError('serverUrl cannot be empty');
+      }
+      if (!serverUrl.startsWith('http')) {
+        throw ArgumentError('serverUrl must be a valid HTTP(S) URL');
+      }
+    } else {
+      // Only an https callback keeps the code away from other apps; the
+      // WebView and polling flows need the proxy's own callback.
+      if (callbackUrl == null || Uri.tryParse(callbackUrl!)?.scheme != 'https') {
+        throw ArgumentError('direct mode needs an https callbackUrl');
+      }
+      if (direct!.clientId.isEmpty || direct!.clientSecret.isEmpty) {
+        throw ArgumentError('direct mode needs clientId and clientSecret');
+      }
     }
     if (scopes.isEmpty) {
       throw ArgumentError('scopes cannot be empty');
@@ -75,7 +93,8 @@ class CertiliaConfig {
           listEquals(scopes, other.scopes) &&
           preferEphemeralSession == other.preferEphemeralSession &&
           enableLogging == other.enableLogging &&
-          callbackUrl == other.callbackUrl;
+          callbackUrl == other.callbackUrl &&
+          direct == other.direct;
 
   @override
   int get hashCode =>
@@ -83,7 +102,8 @@ class CertiliaConfig {
       scopes.hashCode ^
       preferEphemeralSession.hashCode ^
       enableLogging.hashCode ^
-      callbackUrl.hashCode;
+      callbackUrl.hashCode ^
+      direct.hashCode;
 
   @override
   String toString() {
@@ -92,7 +112,8 @@ class CertiliaConfig {
         'scopes: $scopes, '
         'preferEphemeralSession: $preferEphemeralSession, '
         'enableLogging: $enableLogging, '
-        'callbackUrl: $callbackUrl)';
+        'callbackUrl: $callbackUrl, '
+        'direct: $direct)';
   }
 }
 

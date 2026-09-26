@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../exceptions/certilia_exception.dart';
 import '../models/certilia_extended_info.dart';
 import '../models/certilia_user.dart';
+import 'certilia_auth_backend.dart';
 import 'certilia_logger.dart';
 
 /// HTTP client for the certilia-server proxy.
@@ -14,7 +15,7 @@ import 'certilia_logger.dart';
 /// Owns every request the SDK makes against the proxy: OAuth init, polling
 /// session lifecycle (web), code-for-token exchange (with retry), refresh,
 /// user info, and extended info. Stateless — callers manage tokens.
-class ProxyAuthService {
+class ProxyAuthService implements CertiliaAuthBackend {
   final String serverUrl;
   final http.Client _httpClient;
   final CertiliaLogger _logger;
@@ -48,6 +49,7 @@ class ProxyAuthService {
   /// [redirectUri] is where Certilia sends the browser after login. It
   /// defaults to [proxyCallbackUrl]. The proxy picks the Certilia client
   /// registered for this URI.
+  @override
   Future<Map<String, dynamic>> initialize({String? redirectUri}) async {
     final url = '$serverUrl/api/auth/initialize'
         '?response_type=code'
@@ -113,6 +115,7 @@ class ProxyAuthService {
   }
 
   /// POST /api/auth/exchange — code → tokens. Retries on transient failure.
+  @override
   Future<Map<String, dynamic>> exchange({
     required String code,
     required String state,
@@ -172,6 +175,7 @@ class ProxyAuthService {
   /// Both tokens travel in the JSON body. Earlier versions of this SDK put
   /// the access token in the Authorization header; the server still accepts
   /// that for backward compatibility but new code should use the body path.
+  @override
   Future<Map<String, dynamic>> refresh({
     required String accessToken,
     required String refreshToken,
@@ -201,7 +205,9 @@ class ProxyAuthService {
   }
 
   /// GET /api/auth/user — basic profile. Throws on non-200.
-  Future<CertiliaUser> fetchUserInfo(String accessToken) async {
+  @override
+  Future<CertiliaUser> fetchUserInfo(String accessToken,
+      {String? idToken}) async {
     final response = await _httpClient.get(
       Uri.parse('$serverUrl/api/auth/user'),
       headers: {
@@ -224,7 +230,9 @@ class ProxyAuthService {
   ///
   /// Returns null on 401/502 to let callers decide whether to refresh the
   /// token and retry. Throws on other non-200 statuses.
-  Future<CertiliaExtendedInfo?> fetchExtendedInfo(String accessToken) async {
+  @override
+  Future<CertiliaExtendedInfo?> fetchExtendedInfo(String accessToken,
+      {String? idToken}) async {
     final response = await _httpClient.get(
       Uri.parse('$serverUrl/api/user/extended-info'),
       headers: {
@@ -249,6 +257,7 @@ class ProxyAuthService {
     );
   }
 
+  @override
   void close() => _httpClient.close();
 
   CertiliaNetworkException _timeout(String op) => CertiliaNetworkException(

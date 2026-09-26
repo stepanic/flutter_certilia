@@ -6,13 +6,15 @@ import 'models/certilia_extended_info.dart';
 import 'models/certilia_user.dart';
 import 'oauth_callback.dart';
 import 'services/certilia_logger.dart';
-import 'services/proxy_auth_service.dart';
+import 'services/auth_backend_factory.dart';
+import 'services/certilia_auth_backend.dart';
 
 /// OAuth flow shared by the mobile/desktop clients.
 ///
-/// The proxy builds the authorization URL and exchanges the code, because
-/// Certilia only issues confidential clients (the token endpoint rejects a
-/// request without the client secret). Subclasses decide how the user
+/// The [backend] builds the authorization URL and exchanges the code: the
+/// proxy, which keeps the client secret on a server, or in direct mode
+/// Certilia itself (Certilia only issues confidential clients, so one of
+/// them must present the secret). Subclasses decide how the user
 /// reaches Certilia's login page and how the redirect comes back to the
 /// app: [CertiliaWebViewClient] watches an in-app WebView for the proxy's
 /// callback URL, [CertiliaBrowserClient] lets the system browser return a
@@ -22,25 +24,23 @@ import 'services/proxy_auth_service.dart';
 abstract class CertiliaNativeClient {
   final CertiliaConfig config;
   final String serverUrl;
-  final ProxyAuthService proxy;
+  final CertiliaAuthBackend backend;
   final CertiliaLogger logger;
 
   CertiliaNativeClient({
     required this.config,
     required this.serverUrl,
     required String componentName,
-    ProxyAuthService? proxyService,
+    CertiliaAuthBackend? backend,
   })  : logger = CertiliaLogger(
           componentName: componentName,
           enableLogging: config.enableLogging,
         ),
-        proxy = proxyService ??
-            ProxyAuthService(
+        backend = backend ??
+            createAuthBackend(
+              config: config,
               serverUrl: serverUrl,
-              logger: CertiliaLogger(
-                componentName: '$componentName.proxy',
-                enableLogging: config.enableLogging,
-              ),
+              componentName: componentName,
             ) {
     config.validate();
   }
@@ -59,7 +59,7 @@ abstract class CertiliaNativeClient {
   Future<Map<String, dynamic>> authenticate(BuildContext context) async {
     try {
       logger.log('Starting authentication, redirect URI: $redirectUri');
-      final authData = await proxy.initialize(redirectUri: redirectUri);
+      final authData = await backend.initialize(redirectUri: redirectUri);
       final state = authData['state'] as String;
 
       if (!context.mounted) {
@@ -74,7 +74,7 @@ abstract class CertiliaNativeClient {
       );
       final code = codeFromCallback(callback, expectedState: state);
 
-      final tokenData = await proxy.exchange(
+      final tokenData = await backend.exchange(
         code: code,
         state: state,
         sessionId: authData['session_id'] as String,
@@ -106,7 +106,7 @@ abstract class CertiliaNativeClient {
   }) async {
     try {
       logger.log('Refreshing token');
-      final tokenData = await proxy.refresh(
+      final tokenData = await backend.refresh(
         accessToken: accessToken,
         refreshToken: refreshToken,
       );
@@ -130,9 +130,10 @@ abstract class CertiliaNativeClient {
 
   /// Fetches basic user info using the supplied access token.
   /// Returns null on failure rather than throwing — callers expect this.
-  Future<CertiliaUser?> getUserInfo(String accessToken) async {
+  Future<CertiliaUser?> getUserInfo(String accessToken,
+      {String? idToken}) async {
     try {
-      return await proxy.fetchUserInfo(accessToken);
+      return await backend.fetchUserInfo(accessToken, idToken: idToken);
     } catch (e) {
       logger.log('Failed to get user info: $e');
       return null;
@@ -141,9 +142,10 @@ abstract class CertiliaNativeClient {
 
   /// Fetches extended user info using the supplied access token.
   /// Returns null on 401/502 so the caller can refresh and retry.
-  Future<CertiliaExtendedInfo?> getExtendedUserInfo(String accessToken) {
-    return proxy.fetchExtendedInfo(accessToken);
+  Future<CertiliaExtendedInfo?> getExtendedUserInfo(String accessToken,
+      {String? idToken}) {
+    return backend.fetchExtendedInfo(accessToken, idToken: idToken);
   }
 
-  void dispose() => proxy.close();
+  void dispose() => backend.close();
 }

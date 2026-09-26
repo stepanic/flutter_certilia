@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'certilia_stateful_wrapper.dart';
 import 'models/certilia_config.dart';
+import 'models/certilia_direct_client.dart';
 
 // Platform-specific factory: picks the web popup client on web, the
 // WebView-based stateful wrapper on mobile/desktop.
@@ -15,13 +16,22 @@ import 'certilia_sdk_factory.dart'
 
 /// Entry point for the Flutter Certilia SDK.
 ///
-/// The SDK is designed around a backend proxy (`certilia-server`) that
-/// handles all OAuth communication with Certilia. The Flutter client only
-/// needs to know the URL of that proxy.
+/// Normally the SDK talks to a backend proxy (`certilia-server`) that holds
+/// the Certilia client secret; the Flutter client only needs its URL:
 ///
 /// ```dart
 /// final client = await CertiliaSDK.initialize(
 ///   serverUrl: 'https://your-backend-server.com',
+/// );
+/// ```
+///
+/// Without a server, the app talks to Certilia itself ([direct]) and
+/// receives the redirect on an https callback:
+///
+/// ```dart
+/// final client = await CertiliaSDK.initialize(
+///   direct: const CertiliaDirectClient(clientId: '...', clientSecret: '...'),
+///   callbackUrl: 'https://app.example/certilia_callback.html',
 /// );
 /// ```
 class CertiliaSDK {
@@ -33,16 +43,19 @@ class CertiliaSDK {
   /// getCurrentUser/getExtendedUserInfo surface.
   ///
   /// [callbackUrl] selects how the login result reaches the app; see
-  /// [CertiliaConfig.callbackUrl].
+  /// [CertiliaConfig.callbackUrl]. Pass either [serverUrl] (the proxy) or
+  /// [direct] (no server; needs an https [callbackUrl]).
   static Future<dynamic> initialize({
-    required String serverUrl,
+    String? serverUrl,
+    CertiliaDirectClient? direct,
     List<String>? scopes,
     bool enableLogging = false,
     bool preferEphemeralSession = true,
     String? callbackUrl,
   }) async {
     final config = CertiliaConfig(
-      serverUrl: serverUrl,
+      serverUrl: serverUrl ?? '',
+      direct: direct,
       callbackUrl: callbackUrl,
       scopes: scopes ??
           const ['openid', 'profile', 'eid', 'email', 'offline_access'],
@@ -56,9 +69,9 @@ class CertiliaSDK {
     }
 
     if (kIsWeb) {
-      return createWebClient(config: config, serverUrl: serverUrl);
+      return createWebClient(config: config, serverUrl: config.serverUrl);
     }
-    return CertiliaStatefulWrapper(config: config, serverUrl: serverUrl);
+    return CertiliaStatefulWrapper(config: config, serverUrl: config.serverUrl);
   }
 }
 

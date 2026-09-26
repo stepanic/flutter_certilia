@@ -36,15 +36,15 @@ Future<String> _flutterWebAuth2({
 /// - an https URL that is an Android App Link / iOS Universal Link for the
 ///   app (verified through assetlinks.json / apple-app-site-association).
 ///
-/// The code exchange still goes through the proxy, which holds the client
-/// secret.
+/// The code exchange goes through the backend: the proxy, which holds the
+/// client secret, or Certilia itself in direct mode.
 class CertiliaBrowserClient extends CertiliaNativeClient {
   final WebAuthLauncher _launch;
 
   CertiliaBrowserClient({
     required super.config,
     required super.serverUrl,
-    super.proxyService,
+    super.backend,
     WebAuthLauncher? launcher,
   })  : _launch = launcher ?? _flutterWebAuth2,
         super(componentName: 'CertiliaBrowserClient') {

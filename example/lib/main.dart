@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_certilia/flutter_certilia.dart';
 import 'certilia_auth/certilia_auth_widget.dart';
 import 'certilia_auth/theme/certilia_theme.dart';
 
@@ -17,6 +18,13 @@ const _serverUrl = String.fromEnvironment(
 ///   Android custom scheme: --dart-define=CERTILIA_CALLBACK_URL=hr.example.app:1/callback
 ///   Web / App Link:        --dart-define=CERTILIA_CALLBACK_URL=https://app.example/certilia_callback.html
 const _callbackUrl = String.fromEnvironment('CERTILIA_CALLBACK_URL');
+
+/// Direct mode, no certilia-server: the app holds the Certilia client and
+/// talks to Certilia itself. Needs an https CERTILIA_CALLBACK_URL. The secret
+/// is compiled into the app, where anyone can read it; see the README.
+///   --dart-define=CERTILIA_CLIENT_ID=... --dart-define=CERTILIA_CLIENT_SECRET=...
+const _clientId = String.fromEnvironment('CERTILIA_CLIENT_ID');
+const _clientSecret = String.fromEnvironment('CERTILIA_CLIENT_SECRET');
 
 const _scopes = ['openid', 'profile', 'eid', 'email', 'offline_access'];
 
@@ -45,6 +53,12 @@ class _MyAppState extends State<MyApp> {
   CertiliaAuthWidget _buildAuthWidget() {
     return CertiliaAuthWidget(
       serverUrl: _serverUrl,
+      direct: _clientId.isEmpty
+          ? null
+          : const CertiliaDirectClient(
+              clientId: _clientId,
+              clientSecret: _clientSecret,
+            ),
       callbackUrl: _callbackUrl.isEmpty ? null : _callbackUrl,
       scopes: _scopes,
       enableLogging: true,
