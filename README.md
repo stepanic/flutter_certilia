@@ -213,6 +213,23 @@ registering the scheme in `Info.plist`. An https callback needs iOS
 `apple-app-site-association` served on that host. The native iOS flow
 has not been tested in this repo yet; the web flow has (Safari, iOS 18).
 
+### Known limitation: the login must finish in the same app process
+
+The pending login exists only in memory: the PKCE verifier, `state` and
+`nonce` in direct mode, the proxy's session ID in proxy mode. If the app
+process dies before Certilia's redirect comes back, the login is lost and
+the user has to start again. On a phone this can happen while the user
+approves the push in the Certilia app, because Android may kill a
+background app when memory is short. flutter_web_auth_2 then also drops
+the redirect, since the Dart code waiting for it died with the old
+process. A mobile browser can likewise discard a background tab running
+the web app.
+
+A fix would catch the redirect intent on a cold start (e.g. with
+`app_links`) and keep the pending login in secure storage. Not reproduced
+yet; on Android, "Don't keep activities" in the developer options makes
+it reproducible.
+
 ### Registering a custom-scheme callback
 
 The Certilia developer portal states "Only HTTPS is allowed" for the

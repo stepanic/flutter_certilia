@@ -66,6 +66,13 @@ Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
    (`invalid_grant`, "Persisted access token data not found"), ni sa
    servera ni iz browsera. `/api/auth/refresh` proxyja samo ponovno
    potpisuje svoj JWT i Certiliju ne zove.
+10. **Login se gubi ako aplikacija umre usred logina.** Započeti login
+    (PKCE verifier, state, nonce; u proxy modu session_id) postoji samo
+    u memoriji. Ako Android ubije aplikaciju dok korisnik potvrđuje push
+    u Certilia aplikaciji, redirect stiže u novi proces i flutter_web_auth_2
+    ga odbacuje. Popravak: hvatati redirect intent pri hladnom startu
+    (npr. `app_links`) i čuvati započeti login u secure storageu. Nije
+    reproducirano; "Don't keep activities" u developer opcijama to omogućuje.
 
 Stara lista "odbačenih pristupa" iz `REFACTOR_PLAN.md` navodila je
 razloge koji nisu bili provjereni; tamo je tablica ažurirana.
