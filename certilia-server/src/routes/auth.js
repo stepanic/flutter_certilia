@@ -53,22 +53,4 @@ router.post(
   authController.refreshToken
 );
 
-
-/**
- * @route POST /auth/polling/start
- * @desc Start a polling session for the web popup flow
- * @body {string} state - OAuth state
- * @body {string} session_id - Session ID
- * @returns {Object} Polling session info
- */
-router.post('/polling/start', authController.startPolling);
-
-/**
- * @route GET /auth/polling/:polling_id/status
- * @desc Check polling session status
- * @param {string} polling_id - Polling session ID
- * @returns {Object} Session status and result
- */
-router.get('/polling/:polling_id/status', authController.checkPollingStatus);
-
 export default router;

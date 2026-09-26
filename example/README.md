@@ -67,18 +67,19 @@ step by step.
 
 ## Platform behavior
 
-Without `CERTILIA_CALLBACK_URL`, the SDK opens a popup on web and polls
-the proxy until the login completes; on mobile it pushes a full-screen
-`WebView` route. Both close themselves on success and return a
-`CertiliaUser`. With a callback URL, web uses a popup and the callback
-page, and mobile uses the system browser.
+On web the SDK opens a popup, and Certilia returns it to
+`web/certilia_callback.html` on the app's origin. Without
+`CERTILIA_CALLBACK_URL` the example uses its own callback page, so that
+URL must be registered as the Certilia client's callback. On mobile
+without a callback URL the SDK pushes a full-screen `WebView` route; with
+one it uses the system browser. Both return a `CertiliaUser`.
 
 ```mermaid
 flowchart LR
     A[User taps<br/>Login] --> B{Platform?}
     B -->|Web| C[Popup window]
     B -->|Mobile| D[In-app WebView]
-    C --> E[Proxy<br/>polling]
+    C --> E[certilia_callback.html<br/>on the app's origin]
     D --> F[Proxy<br/>callback URL]
     E --> G[Tokens]
     F --> G

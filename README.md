@@ -31,7 +31,10 @@ In [direct mode](#direct-mode-no-server) the app holds the client
 itself and talks to Certilia without a server. In both modes the app can
 receive the login redirect itself; see [Login flows](#login-flows).
 
-In proxy mode without a `callbackUrl`, the login runs like this:
+In proxy mode the login runs like this. On mobile without a `callbackUrl`
+an in-app WebView watches for the proxy's callback; on web the popup
+returns to a callback page on the app's own origin (see
+[Login flows](#login-flows)):
 
 ```mermaid
 sequenceDiagram
@@ -42,22 +45,16 @@ sequenceDiagram
     participant IDP as Certilia IDP
 
     App->>SDK: authenticate(context)
-    SDK->>Proxy: GET /api/auth/initialize
+    SDK->>Proxy: GET /api/auth/initialize (redirect_uri)
     Proxy-->>SDK: authorization_url, state, session_id
 
-    alt Mobile / desktop
-        SDK->>SDK: open in-app WebView
-        SDK->>IDP: authorize (via WebView)
-        IDP-->>SDK: redirect to proxy callback with code
-    else Web
-        SDK->>Proxy: POST /api/auth/polling/start
-        SDK->>SDK: open popup window
-        SDK->>IDP: authorize (via popup)
-        IDP->>Proxy: GET /api/auth/callback
-        loop every 2s
-            SDK->>Proxy: GET /api/auth/polling/:id/status
-        end
-        Proxy-->>SDK: status: completed, code
+    alt Mobile, in-app WebView
+        SDK->>IDP: authorize (in the WebView)
+        IDP-->>SDK: redirect to the proxy callback with code
+    else Web, popup
+        SDK->>IDP: authorize (in the popup)
+        IDP-->>SDK: redirect to certilia_callback.html on the app's origin
+        Note over SDK: the page hands the code to the app over<br/>BroadcastChannel / localStorage
     end
 
     SDK->>Proxy: POST /api/auth/exchange (code, state, session_id)
@@ -142,10 +139,10 @@ the code; in direct mode the app exchanges it with Certilia.
 
 | `callbackUrl` | Mobile | Web |
 |---|---|---|
-| `null` (default) | In-app WebView watches for the proxy's `/api/auth/callback` | Popup; the app polls the proxy until the code arrives |
+| `null` (default) | In-app WebView watches for the proxy's `/api/auth/callback` | Not allowed: web requires a callback page |
 | Custom scheme, e.g. `hr.example.app:1/callback` | System browser (Android Auth Tab / Custom Tabs, iOS `ASWebAuthenticationSession`); the OS returns the redirect | n/a |
 | https App Link / Universal Link | Same as above, redirect verified through `assetlinks.json` / `apple-app-site-association` | n/a |
-| https page on the app's own origin, e.g. `https://app.example/certilia_callback.html` | n/a | Popup; [`certilia_callback.html`](example/web/certilia_callback.html) hands the result to the app over BroadcastChannel and localStorage; no polling |
+| https page on the app's own origin, e.g. `https://app.example/certilia_callback.html` | n/a | Popup; [`certilia_callback.html`](example/web/certilia_callback.html) hands the result to the app over BroadcastChannel and localStorage |
 
 One https URL can serve as both the web callback page and the Android
 App Link, so a single Certilia client covers both.
@@ -163,6 +160,13 @@ App Link, so a single Certilia client covers both.
   `Cross-Origin-Opener-Policy: same-origin`: the callback page does not
   use `window.opener`, which COOP cuts as soon as the popup reaches
   Certilia.
+- The code comes back only to the browser that logged in, on your app's
+  origin. That is what makes a popup login safe: if someone else starts a
+  login and sends the user the Certilia link, the code still lands in the
+  user's own browser, where the other party cannot read it. Do not deliver
+  the code anywhere else, for example through a proxy endpoint the app
+  polls: whoever polls would receive it, including a party that started
+  the login in order to collect another user's code.
 
 ### Android
 

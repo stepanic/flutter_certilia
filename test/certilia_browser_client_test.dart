@@ -106,7 +106,8 @@ void main() {
     Uri cb(String query) => Uri.parse('$_customCallback?$query');
 
     test('returns the code when state matches', () {
-      expect(codeFromCallback(cb('code=abc&state=s'), expectedState: 's'), 'abc');
+      expect(
+          codeFromCallback(cb('code=abc&state=s'), expectedState: 's'), 'abc');
     });
 
     test('null callback means the user cancelled', () {
@@ -265,6 +266,14 @@ void main() {
   });
 
   group('CertiliaConfig.callbackUrl', () {
+    test('is required on web, optional on mobile', () {
+      const config = CertiliaConfig(serverUrl: _serverUrl);
+      expect(() => config.validate(isWeb: true), throwsArgumentError);
+      config.validate(isWeb: false);
+      const CertiliaConfig(serverUrl: _serverUrl, callbackUrl: _httpsCallback)
+          .validate(isWeb: true);
+    });
+
     test('accepts https and custom schemes', () {
       const CertiliaConfig(serverUrl: _serverUrl, callbackUrl: _httpsCallback)
           .validate();

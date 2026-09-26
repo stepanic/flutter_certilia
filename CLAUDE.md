@@ -76,6 +76,13 @@ Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
     ga odbacuje. Popravak: hvatati redirect intent pri hladnom startu
     (npr. `app_links`) i čuvati započeti login u secure storageu. Nije
     reproducirano; "Don't keep activities" u developer opcijama to omogućuje.
+11. **Code se vraća samo u browser koji se prijavio.** Na webu ga
+    donosi callback stranica na originu aplikacije. Ne dodaj put kojim
+    code ide drugamo (npr. proxy endpoint koji aplikacija pollira):
+    dobio bi ga onaj tko pollira, pa i netko tko je sam pokrenuo login i
+    korisniku poslao Certilia link da pokupi njegov code. Zato web traži
+    `callbackUrl`, proxy nema polling endpointe, a callback stranica
+    proxyja code ne šalje `window.opener`u.
 
 `REFACTOR_PLAN.md` uz izvornu listu odbačenih pristupa ima tablicu s
 provjerenim razlozima.
@@ -92,7 +99,7 @@ lib/
     certilia_native_client.dart            # mobile/desktop: zajednički OAuth tok (exchange, refresh, state)
     certilia_webview_client.dart           # mobile/desktop: WebView flow (bez callbackUrl)
     certilia_browser_client.dart           # mobile: sistemski browser (callbackUrl: custom scheme / App Link)
-    certilia_web_client.dart               # web: popup + polling ili popup + callback stranica
+    certilia_web_client.dart               # web: popup + callback stranica
     oauth_callback.dart                    # parsiranje callback URL-a, provjera state-a
     refresh_errors.dart                    # koji neuspjeli refresh završava sesiju
     certilia_stateful_wrapper.dart         # mobile/desktop: state management
@@ -113,7 +120,7 @@ lib/
       certilia_exception.dart              # hijerarhija iznimaka
 example/                                   # demo aplikacija, copy-paste-ready UI
 certilia-server/                           # Node.js proxy
-test/                                      # unit testovi (96 prolaze)
+test/                                      # unit testovi (93 prolaze)
 ```
 
 ## Javni API
@@ -129,9 +136,9 @@ final certilia = await CertiliaSDK.initialize(
 );
 ```
 
-Opcionalni `callbackUrl` bira kamo Certilia vraća browser nakon logina
-(vidi README, "Login flows"). Bez njega vrijede WebView (mobile) i
-popup + polling (web).
+`callbackUrl` bira kamo Certilia vraća browser nakon logina (vidi README,
+"Login flows"). Na webu je obavezan; na mobitelu bez njega vrijedi
+in-app WebView.
 
 Vraćeni objekt ima različit konkretan tip ovisno o platformi
 (`CertiliaWebClient` na webu, `CertiliaStatefulWrapper` na mobile/
@@ -206,7 +213,7 @@ provjera ID tokena), bez servera; direct mode uvijek ima `callbackUrl`.
    provjeri `state` i izvuče `code`
 5. `ProxyAuthService.exchange(...)` → tokeni
 
-### Web (popup + callback stranica, `callbackUrl` postavljen)
+### Web (popup + callback stranica)
 
 1. `CertiliaWebClient.authenticate(context)` otvara prazan popup
    odmah, prije ikakvog awaita (Safari)
@@ -218,28 +225,14 @@ provjera ID tokena), bez servera; direct mode uvijek ima `callbackUrl`.
    i briše, provjeri `state`
 5. `ProxyAuthService.exchange(...)` → tokeni
 
-### Web (popup + polling)
-
-1. `CertiliaWebClient.authenticate(context)` → otvori prazan popup
-2. `ProxyAuthService.initialize()` → state + session_id
-3. `ProxyAuthService.startPollingSession()` → polling_id
-4. Popup ide na authorization_url
-5. Server obradi callback, sprema rezultat na polling_id
-6. Klijent svake 2s `ProxyAuthService.pollStatus(pollingId)` →
-   čim status=completed, dohvati code
-7. `ProxyAuthService.exchange(code, ...)` → tokeni
-8. SDK zatvori popup
-
 ## Endpointi `certilia-server`-a koje SDK koristi
 
 | HTTP | Path | Što radi |
 |---|---|---|
 | GET | `/api/auth/initialize` | Pokreće OAuth, vraća authorization_url + state + session_id |
-| GET | `/api/auth/callback` | Server-side callback (Certilia ga zove) |
+| GET | `/api/auth/callback` | Callback proxyja za mobilni WebView flow (Certilia ga zove) |
 | POST | `/api/auth/exchange` | Code → tokeni |
 | POST | `/api/auth/refresh` | Refresh tokena (oba tokena u body-ju) |
-| POST | `/api/auth/polling/start` | Web: kreira polling sesiju |
-| GET | `/api/auth/polling/:id/status` | Web: polling result |
 | GET | `/api/auth/user` | Basic user info iz JWT-a |
 | GET | `/api/user/extended-info` | Puni profil iz Certilije |
 
@@ -273,7 +266,7 @@ provjera ID tokena), bez servera; direct mode uvijek ima `callbackUrl`.
   `certilia-server/`. Mora postojati ngrok tunel za auth callback na
   javnoj HTTPS adresi.
 - **Testovi:** `flutter test` mora biti zelen prije svakog commita.
-  Trenutno 96 testova; ako mijenjaš `ProxyAuthService`, ažuriraj
+  Trenutno 93 testa; ako mijenjaš `ProxyAuthService`, ažuriraj
   `test/services/proxy_auth_service_test.dart`.
 - **Commit poruke:** conventional (`feat:`, `fix:`, `refactor:`,
   `docs:`, `test:`, `build:`). Engleski. Kratak naslov, body objašnjava

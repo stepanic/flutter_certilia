@@ -1,7 +1,6 @@
 import certiliaService from '../services/certiliaService.js';
 import tokenService from '../services/tokenService.js';
 import sessionService from '../services/sessionService.js';
-import pollingSessionService from '../services/pollingSessionService.js';
 import { convertKeysToSnakeCase } from '../utils/caseConverter.js';
 import { generateRandomString, generatePKCEChallenge, generatePKCEVerifier, generateState, generateNonce } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
@@ -138,8 +137,10 @@ export const initializeAuth = async (req, res, next) => {
 
 /**
  * Handle OAuth callback from Certilia.
- * Certilia redirects the browser here after login in the flows that use the
- * proxy's callback (the WebView and the web popup with polling).
+ * Certilia redirects the browser here after login in the mobile WebView flow,
+ * which reads the code from this URL. The page keeps the code in the browser
+ * that logged in: the proxy stores nothing and hands it to no one else, so a
+ * login someone else started gives them nothing.
  */
 export const handleCallback = async (req, res, next) => {
   try {
@@ -177,19 +178,6 @@ export const handleCallback = async (req, res, next) => {
         deepLink: null,
       };
       
-      // Update polling session with error
-      if (state) {
-        const updated = pollingSessionService.updateSessionByState(state, {
-          error,
-          errorDescription: error_description,
-          success: false,
-        });
-        
-        if (updated) {
-          logger.info('Updated polling session with error for state:', state);
-        }
-      }
-      
       return res.send(renderCallbackTemplate(errorData));
     }
 
@@ -219,17 +207,6 @@ export const handleCallback = async (req, res, next) => {
 
     logger.info('Rendering success callback template with data:', templateData);
     
-    // The web popup flow polls for this result.
-    const updated = pollingSessionService.updateSessionByState(state, {
-      code,
-      state,
-      success: true,
-    });
-    
-    if (updated) {
-      logger.info('Updated polling session for state:', state);
-    }
-
     res.send(renderCallbackTemplate(templateData));
   } catch (error) {
     next(error);
@@ -523,55 +500,6 @@ export const logout = async (req, res, next) => {
     res.json({
       message: 'Logged out successfully',
     });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Start a polling session for the web popup flow without a callbackUrl.
- */
-export const startPolling = async (req, res, next) => {
-  try {
-    const { state, session_id } = req.body;
-
-    logger.info('Starting polling session', { state, session_id });
-
-    // Create polling session
-    const pollingSession = pollingSessionService.createSession({
-      state,
-      sessionId: session_id,
-    });
-
-    res.json({
-      polling_id: pollingSession.pollingId,
-      expires_at: pollingSession.expiresAt,
-      status: 'pending',
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Check polling session status
- */
-export const checkPollingStatus = async (req, res, next) => {
-  try {
-    const { polling_id } = req.params;
-
-    logger.info('Checking polling status', { polling_id });
-
-    const status = pollingSessionService.getStatus(polling_id);
-
-    if (status.status === 'not_found') {
-      return res.status(404).json({
-        error: 'Session not found',
-        message: status.error,
-      });
-    }
-
-    res.json(status);
   } catch (error) {
     next(error);
   }

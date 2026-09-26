@@ -8,7 +8,7 @@
   Custom Tabs, iOS `ASWebAuthenticationSession`) with a custom-scheme or
   https App Link / Universal Link callback. On web a callback page on the
   app's origin (`example/web/certilia_callback.html`) reports the result
-  over BroadcastChannel and localStorage, without polling.
+  over BroadcastChannel and localStorage.
 * Direct mode (`CertiliaDirectClient`): the app holds the Certilia client
   and talks to Certilia without `certilia-server`. It requires an https
   callback, and the SDK verifies the ID token against Certilia's JWKS.
@@ -29,8 +29,25 @@
   Certilia or the proxy refuses the refresh. A timeout or server error
   keeps the session and throws.
 
+### Removed
+
+* The web popup flow that polled the proxy for the code, with the
+  proxy's `/api/auth/polling/*` endpoints and `ProxyAuthService`'s polling
+  methods. Whoever polled received the code, so anyone could start a login
+  on a deployed proxy, send a user the Certilia link and collect that
+  user's code. On web, `callbackUrl` is now required.
+
+### Security
+
+* certilia-server: the callback page no longer posts the authorization
+  code to `window.opener`; it went to any page that had opened it.
+* certilia-server: `/api/auth/refresh` verifies the access token it copies
+  claims from, so a refresh token can no longer get arbitrary claims
+  signed. The refreshed token keeps the user's claims.
+
 ### Fixed
 
+* `CertiliaUser.hashCode` agrees with `==`.
 * Android: the login tab no longer stays open above the app after the
   redirect; `preferEphemeralSession` is passed to the browser only on
   iOS and macOS.

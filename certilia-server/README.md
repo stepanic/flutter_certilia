@@ -144,7 +144,7 @@ Create `.env.local.production` for PRODUCTION environment with production creden
 
 Certilia registers exactly one callback URL per client and compares it
 exactly. Each login flow with its own callback therefore needs its own
-client: the proxy's `/api/auth/callback` (WebView and popup+polling), a
+client: the proxy's `/api/auth/callback` (mobile WebView flow), a
 mobile custom scheme, an https App Link or web callback page. List the
 extra clients as a JSON array:
 

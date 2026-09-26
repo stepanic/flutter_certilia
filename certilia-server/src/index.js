@@ -122,10 +122,6 @@ app.get('/', (req, res) => {
         callback: 'GET /api/auth/callback',
         exchange: 'POST /api/auth/exchange',
         refresh: 'POST /api/auth/refresh',
-        polling: {
-          start: 'POST /api/auth/polling/start',
-          status: 'GET /api/auth/polling/:polling_id/status'
-        }
       },
       user: {
         extendedInfo: 'GET /api/user/extended-info',

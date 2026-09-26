@@ -13,9 +13,8 @@ import 'certilia_logger.dart';
 /// HTTP client for the certilia-server proxy.
 ///
 /// Makes every request the SDK sends to the proxy: starting the login,
-/// creating and polling the web polling session, exchanging the code (with
-/// retries), refreshing, and fetching the basic and extended profile. It
-/// keeps no tokens; callers store them.
+/// exchanging the code (with retries), refreshing, and fetching the basic
+/// and extended profile. It keeps no tokens; callers store them.
 class ProxyAuthService implements CertiliaAuthBackend {
   final String serverUrl;
   final http.Client _httpClient;
@@ -42,8 +41,8 @@ class ProxyAuthService implements CertiliaAuthBackend {
   })  : _httpClient = httpClient ?? http.Client(),
         _logger = logger;
 
-  /// The callback of the proxy at [serverUrl], used when the app does not
-  /// receive the redirect itself (WebView and popup+polling flows).
+  /// The callback of the proxy at [serverUrl], used by the mobile WebView
+  /// flow, which watches for this URL.
   static String callbackUrlFor(String serverUrl) =>
       '$serverUrl/api/auth/callback';
 
@@ -69,51 +68,6 @@ class ProxyAuthService implements CertiliaAuthBackend {
     if (response.statusCode != 200) {
       throw CertiliaNetworkException(
         message: 'Failed to initialize OAuth flow',
-        statusCode: response.statusCode,
-        details: response.body,
-      );
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
-  }
-
-  /// POST /api/auth/polling/start: web popup flow only.
-  Future<Map<String, dynamic>> startPollingSession({
-    required String state,
-    required String sessionId,
-  }) async {
-    final response = await _httpClient.post(
-      Uri.parse('$serverUrl/api/auth/polling/start'),
-      headers: {
-        ..._baseHeaders,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'state': state, 'session_id': sessionId}),
-    );
-
-    if (response.statusCode != 200) {
-      throw CertiliaNetworkException(
-        message: 'Failed to start polling session',
-        statusCode: response.statusCode,
-        details: response.body,
-      );
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
-  }
-
-  /// GET /api/auth/polling/:id/status: web popup flow only.
-  /// Returns the proxy's JSON as is: `status`, and `result` or `error` when
-  /// present.
-  Future<Map<String, dynamic>?> pollStatus(String pollingId) async {
-    final response = await _httpClient.get(
-      Uri.parse('$serverUrl/api/auth/polling/$pollingId/status'),
-      headers: _baseHeaders,
-    );
-    if (response.statusCode == 404) {
-      return null;
-    }
-    if (response.statusCode != 200) {
-      throw CertiliaNetworkException(
-        message: 'Polling status request failed',
         statusCode: response.statusCode,
         details: response.body,
       );

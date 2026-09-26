@@ -35,15 +35,15 @@ class CertiliaConfig {
   /// use: a client the proxy knows (see `CERTILIA_CLIENTS` in
   /// certilia-server), or [direct].
   ///
-  /// - `null` (default): Certilia redirects to the proxy's own
-  ///   `/api/auth/callback`. Mobile uses an in-app WebView that watches for
-  ///   that URL; web uses a popup and polls the proxy.
+  /// - `null` (default, mobile only): Certilia redirects to the proxy's own
+  ///   `/api/auth/callback`, and an in-app WebView watches for that URL.
   /// - Mobile, custom scheme or https App Link / Universal Link: the login
   ///   runs in the system browser (Android Auth Tab / Custom Tabs, iOS
   ///   ASWebAuthenticationSession), which returns the redirect to the app.
-  /// - Web, a page on the app's own origin (e.g. `https://app.example/certilia_callback.html`):
-  ///   the login runs in a popup and that page reports the result to the
-  ///   app over BroadcastChannel and localStorage; no polling.
+  /// - Web (required), a page on the app's own origin (e.g.
+  ///   `https://app.example/certilia_callback.html`): the login runs in a
+  ///   popup and that page reports the result to the app over
+  ///   BroadcastChannel and localStorage.
   final String? callbackUrl;
 
   const CertiliaConfig({
@@ -67,7 +67,7 @@ class CertiliaConfig {
       }
     } else {
       // Only an https callback keeps the code away from other apps; the
-      // WebView and polling flows need the proxy's own callback.
+      // WebView flow needs the proxy's own callback.
       if (callbackUrl == null || Uri.tryParse(callbackUrl!)?.scheme != 'https') {
         throw ArgumentError('direct mode needs an https callbackUrl');
       }
@@ -77,6 +77,13 @@ class CertiliaConfig {
     }
     if (scopes.isEmpty) {
       throw ArgumentError('scopes cannot be empty');
+    }
+    // On web the code must come back to the browser that logged in, on the
+    // app's own origin. Collecting it anywhere else would hand it to
+    // whoever started the login.
+    if (isWeb && callbackUrl == null) {
+      throw ArgumentError('on web, callbackUrl is required: a page on the '
+          'app\'s origin such as certilia_callback.html');
     }
     if (callbackUrl != null) {
       final uri = Uri.tryParse(callbackUrl!);

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_certilia/flutter_certilia.dart';
 import 'certilia_auth/certilia_auth_widget.dart';
@@ -14,10 +15,20 @@ const _serverUrl = String.fromEnvironment(
 );
 
 /// Where Certilia redirects after login, when the app receives the redirect
-/// itself (see `CertiliaConfig.callbackUrl`). Empty keeps the default flows.
+/// itself (see `CertiliaConfig.callbackUrl`). Empty: the in-app WebView on
+/// mobile, the example's own callback page on web.
 ///   Android custom scheme: --dart-define=CERTILIA_CALLBACK_URL=hr.example.app:1/callback
 ///   Web / App Link:        --dart-define=CERTILIA_CALLBACK_URL=https://app.example/certilia_callback.html
 const _callbackUrl = String.fromEnvironment('CERTILIA_CALLBACK_URL');
+
+/// On web the SDK requires a callback page; default to the example's own
+/// web/certilia_callback.html next to index.html. Register that URL as the
+/// Certilia client's callback.
+String? get _effectiveCallbackUrl {
+  if (_callbackUrl.isNotEmpty) return _callbackUrl;
+  if (kIsWeb) return Uri.base.resolve('certilia_callback.html').toString();
+  return null;
+}
 
 /// Direct mode, no certilia-server: the app holds the Certilia client and
 /// talks to Certilia itself. Needs an https CERTILIA_CALLBACK_URL. The secret
@@ -59,7 +70,7 @@ class _MyAppState extends State<MyApp> {
               clientId: _clientId,
               clientSecret: _clientSecret,
             ),
-      callbackUrl: _callbackUrl.isEmpty ? null : _callbackUrl,
+      callbackUrl: _effectiveCallbackUrl,
       scopes: _scopes,
       enableLogging: true,
       onThemeToggle: _toggleTheme,

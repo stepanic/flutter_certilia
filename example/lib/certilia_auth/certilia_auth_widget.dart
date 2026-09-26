@@ -24,8 +24,8 @@ import 'theme/certilia_theme.dart';
 class CertiliaAuthWidget extends StatefulWidget {
   final String serverUrl;
 
-  /// See `CertiliaConfig.callbackUrl`. Null keeps the WebView (mobile) and
-  /// popup+polling (web) flows.
+  /// See `CertiliaConfig.callbackUrl`. Required on web; null on mobile keeps
+  /// the in-app WebView flow.
   final String? callbackUrl;
 
   /// Certilia client used without the proxy; see `CertiliaDirectClient`.
