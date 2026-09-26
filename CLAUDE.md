@@ -55,8 +55,12 @@ Provjereno pravim eID loginima i izravnim pozivima na `idp.certilia.com`
    mrežnog awaita.** Web klijent otvara prazan popup prije poziva
    proxyju; `authenticate()` se mora zvati izravno iz tap handlera.
 7. **Login potvrđuje push u Certilia aplikaciji**, pa WebView, Auth Tab,
-   ASWebAuthenticationSession i popup rade jednako; nema prebacivanja
-   između aplikacija.
+   ASWebAuthenticationSession i popup rade jednako. Stranica na mobitelu
+   nudi i gumb za otvaranje Certilia aplikacije (prebacivanje između
+   aplikacija), ali push radi i bez njega. Netestirano na mobitelu s
+   Certilia aplikacijom: sistemski browser takve linkove predaje
+   aplikaciji, a in-app WebView (`webview_flutter`) ih po defaultu ne
+   otvara, pa gumb tamo vjerojatno završi greškom.
 8. **Android: bez `preferEphemeral`.** S njim flutter_web_auth_2 5.x na
    Chromeu < 141 otvara običan Custom Tab koji nakon redirecta ostaje
    iznad aplikacije. `CertiliaBrowserClient` ga šalje samo na iOS-u.
