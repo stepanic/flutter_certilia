@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'certilia_browser_client.dart';
+import 'certilia_native_client.dart';
 import 'certilia_webview_client.dart';
 import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
@@ -12,13 +14,15 @@ import 'models/certilia_user.dart';
 import 'services/certilia_logger.dart';
 import 'services/token_storage_service.dart';
 
-/// Stateful wrapper around the stateless [CertiliaWebViewClient].
+/// Stateful wrapper around a stateless [CertiliaNativeClient]:
+/// [CertiliaBrowserClient] when [CertiliaConfig.callbackUrl] is set,
+/// otherwise [CertiliaWebViewClient].
 ///
 /// Manages token + user persistence, refresh-on-expiry, and cached user
 /// state. Used on mobile/desktop targets; the web target's
 /// `CertiliaWebClient` is already stateful by necessity (popup polling).
 class CertiliaStatefulWrapper {
-  final CertiliaWebViewClient _client;
+  final CertiliaNativeClient _client;
   final TokenStorageService _tokenStorage;
   final FlutterSecureStorage _userStorage;
   final CertiliaLogger _logger;
@@ -39,12 +43,11 @@ class CertiliaStatefulWrapper {
     required String serverUrl,
     FlutterSecureStorage? storage,
     TokenStorageService? tokenStorage,
-    CertiliaWebViewClient? client,
+    CertiliaNativeClient? client,
   })  : _client = client ??
-            CertiliaWebViewClient(
-              config: config,
-              serverUrl: serverUrl,
-            ),
+            (config.callbackUrl != null
+                ? CertiliaBrowserClient(config: config, serverUrl: serverUrl)
+                : CertiliaWebViewClient(config: config, serverUrl: serverUrl)),
         _tokenStorage =
             tokenStorage ?? TokenStorageService(storage: storage),
         _userStorage = storage ?? const FlutterSecureStorage(),
@@ -69,7 +72,7 @@ class CertiliaStatefulWrapper {
     }
     _logger.log('Starting authentication...');
     final authData = await _client.authenticate(context);
-    _logger.log('Auth data received from WebView');
+    _logger.log('Auth data received');
 
     _currentToken = _tokenFromResponse(authData);
     await _tokenStorage.saveToken(_currentToken!);

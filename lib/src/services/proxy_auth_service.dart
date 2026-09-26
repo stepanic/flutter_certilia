@@ -39,11 +39,19 @@ class ProxyAuthService {
   })  : _httpClient = httpClient ?? http.Client(),
         _logger = logger;
 
+  /// The proxy's own callback, used when the app does not receive the
+  /// redirect itself (WebView and popup+polling flows).
+  String get proxyCallbackUrl => '$serverUrl/api/auth/callback';
+
   /// GET /api/auth/initialize — returns `authorization_url`, `state`, `session_id`.
-  Future<Map<String, dynamic>> initialize() async {
+  ///
+  /// [redirectUri] is where Certilia sends the browser after login. It
+  /// defaults to [proxyCallbackUrl]. The proxy picks the Certilia client
+  /// registered for this URI.
+  Future<Map<String, dynamic>> initialize({String? redirectUri}) async {
     final url = '$serverUrl/api/auth/initialize'
         '?response_type=code'
-        '&redirect_uri=$serverUrl/api/auth/callback';
+        '&redirect_uri=${Uri.encodeQueryComponent(redirectUri ?? proxyCallbackUrl)}';
     _logger.log('Initializing OAuth flow: $url');
 
     final response = await _httpClient

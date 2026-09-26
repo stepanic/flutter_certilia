@@ -28,17 +28,22 @@ class CertiliaSDK {
   CertiliaSDK._();
 
   /// Build a platform-appropriate client. The returned object differs by
-  /// platform (popup-based on web, WebView+stateful-wrapper on
+  /// platform (popup-based on web, [CertiliaStatefulWrapper] on
   /// mobile/desktop) but exposes the same authenticate/refresh/logout/
   /// getCurrentUser/getExtendedUserInfo surface.
+  ///
+  /// [callbackUrl] selects how the login result reaches the app; see
+  /// [CertiliaConfig.callbackUrl].
   static Future<dynamic> initialize({
     required String serverUrl,
     List<String>? scopes,
     bool enableLogging = false,
     bool preferEphemeralSession = true,
+    String? callbackUrl,
   }) async {
     final config = CertiliaConfig(
       serverUrl: serverUrl,
+      callbackUrl: callbackUrl,
       scopes: scopes ??
           const ['openid', 'profile', 'eid', 'email', 'offline_access'],
       enableLogging: enableLogging,

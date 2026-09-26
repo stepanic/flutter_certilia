@@ -21,11 +21,28 @@ class CertiliaConfig {
   /// Enable verbose SDK logging.
   final bool enableLogging;
 
+  /// Where Certilia sends the browser after login, when the app receives
+  /// the redirect itself. Certilia registers one callback URL per client,
+  /// so this must be exactly the callback of a client the proxy knows
+  /// (see `CERTILIA_CLIENTS` in certilia-server).
+  ///
+  /// - `null` (default): Certilia redirects to the proxy's own
+  ///   `/api/auth/callback`. Mobile uses an in-app WebView that watches for
+  ///   that URL; web uses a popup and polls the proxy.
+  /// - Mobile, custom scheme or https App Link / Universal Link: the login
+  ///   runs in the system browser (Android Auth Tab / Custom Tabs, iOS
+  ///   ASWebAuthenticationSession), which returns the redirect to the app.
+  /// - Web, a page on the app's own origin (e.g. `https://app.example/certilia_callback.html`):
+  ///   the login runs in a popup and that page reports the result to the
+  ///   app over BroadcastChannel; no polling.
+  final String? callbackUrl;
+
   const CertiliaConfig({
     required this.serverUrl,
     this.scopes = const ['openid', 'profile', 'eid'],
     this.preferEphemeralSession = true,
     this.enableLogging = false,
+    this.callbackUrl,
   });
 
   void validate() {
@@ -38,6 +55,15 @@ class CertiliaConfig {
     if (scopes.isEmpty) {
       throw ArgumentError('scopes cannot be empty');
     }
+    if (callbackUrl != null) {
+      final uri = Uri.tryParse(callbackUrl!);
+      if (uri == null || uri.scheme.isEmpty) {
+        throw ArgumentError('callbackUrl must be an absolute URI');
+      }
+      if (uri.scheme == 'http' && uri.host != 'localhost') {
+        throw ArgumentError('callbackUrl must use https or a custom scheme');
+      }
+    }
   }
 
   @override
@@ -48,14 +74,16 @@ class CertiliaConfig {
           serverUrl == other.serverUrl &&
           listEquals(scopes, other.scopes) &&
           preferEphemeralSession == other.preferEphemeralSession &&
-          enableLogging == other.enableLogging;
+          enableLogging == other.enableLogging &&
+          callbackUrl == other.callbackUrl;
 
   @override
   int get hashCode =>
       serverUrl.hashCode ^
       scopes.hashCode ^
       preferEphemeralSession.hashCode ^
-      enableLogging.hashCode;
+      enableLogging.hashCode ^
+      callbackUrl.hashCode;
 
   @override
   String toString() {
@@ -63,7 +91,8 @@ class CertiliaConfig {
         'serverUrl: $serverUrl, '
         'scopes: $scopes, '
         'preferEphemeralSession: $preferEphemeralSession, '
-        'enableLogging: $enableLogging)';
+        'enableLogging: $enableLogging, '
+        'callbackUrl: $callbackUrl)';
   }
 }
 
