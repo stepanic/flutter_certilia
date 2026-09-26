@@ -244,6 +244,11 @@ user profile comes from the ID token: Certilia's `userinfo` endpoint only
 answers requests that carry the token-binding cookie of the browser that
 logged in.
 
+`CertiliaUser.oib` comes from the `oib` or `pin` claim, or from `sub` when
+it is a valid OIB (11 digits with a correct check digit): Certilia's
+portal clients use the OIB as the subject and send no `pin` claim. This
+applies in proxy mode too.
+
 **The client secret is then public.** Anyone can read it from the app
 bundle or the JavaScript. What still protects your users is the exact
 callback match and PKCE: Certilia sends the code only to the registered
@@ -266,7 +271,8 @@ needs no Certilia secret either.
 Refresh: Certilia currently answers refresh requests for portal clients
 with `invalid_grant` ("Persisted access token data not found"), from a
 server and from a browser alike. The user logs in again when the access
-token expires. (The proxy's `/api/auth/refresh` only re-signs its own JWT
+token expires: `getCurrentUser()` then clears the session and returns
+null. (The proxy's `/api/auth/refresh` only re-signs its own JWT
 and never asks Certilia.)
 
 Tested with real logins: in Chrome with

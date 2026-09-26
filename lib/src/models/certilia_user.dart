@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../utils/oib.dart';
+
 /// Represents a Certilia user with their identity information
 @immutable
 class CertiliaUser {
@@ -12,7 +14,9 @@ class CertiliaUser {
   /// User's last name
   final String? lastName;
 
-  /// User's OIB (Croatian tax number)
+  /// User's OIB (Croatian personal identification number): the `oib` or
+  /// `pin` claim, or `sub` when it is a valid OIB (Certilia sends the OIB
+  /// as the subject).
   final String? oib;
 
   /// User's date of birth
@@ -48,7 +52,7 @@ class CertiliaUser {
                json['last_name'] as String? ??
                json['familyName'] as String? ??
                json['lastName'] as String?,
-      oib: json['oib'] as String? ?? json['pin'] as String?,
+      oib: oibFromClaims(json),
       dateOfBirth: _parseDate(
         json['birthdate'] as String? ??
         json['date_of_birth'] as String? ??

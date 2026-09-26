@@ -107,7 +107,16 @@ class CertiliaStatefulWrapper {
 
     if (_currentToken!.isExpired) {
       if (_currentToken!.refreshToken == null) return null;
-      await refreshToken();
+      try {
+        await refreshToken();
+      } on CertiliaException catch (e) {
+        // Certilia currently refuses refresh for portal clients, so in direct
+        // mode every session ends here when the access token expires. End it
+        // cleanly instead of throwing at the caller.
+        _logger.log('Refresh failed, logging out: $e');
+        await logout();
+        return null;
+      }
     }
 
     if (_currentUser != null) return _currentUser;

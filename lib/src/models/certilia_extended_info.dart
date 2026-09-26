@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../utils/oib.dart';
+
 /// Extended user information from Certilia API
 @immutable
 class CertiliaExtendedInfo {
@@ -48,7 +50,8 @@ class CertiliaExtendedInfo {
   String? get lastName => userInfo['family_name'] as String?;
   String? get fullName => userInfo['name'] as String?;
   String? get email => userInfo['email'] as String?;
-  String? get oib => userInfo['oib'] as String?;
+  /// The `oib` or `pin` claim, or `sub` when it is a valid OIB.
+  String? get oib => oibFromClaims(userInfo);
   String? get dateOfBirth => userInfo['birthdate'] as String?;
   String? get gender => userInfo['gender'] as String?;
   String? get nationality => userInfo['nationality'] as String?;
