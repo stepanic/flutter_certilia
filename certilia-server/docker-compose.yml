@@ -19,7 +19,7 @@ services:
     image: certilia-server:${TAG:-latest}
     restart: unless-stopped
     # Container sluša na 8080 (PORT env, HOST 0.0.0.0). Reverse-proxy (Coolify
-    # Traefik / Cloudflare Tunnel) ruta na ovaj port PREKO Docker mreže — NE
+    # Traefik / Cloudflare Tunnel) ruta na ovaj port PREKO Docker mreže, pa NE
     # treba (ni se smije forsirati) host port binding. `expose` umjesto `ports`
     # izbjegava "Bind for 0.0.0.0:8080 failed: port is already allocated" kad je
     # host port zauzet drugim servisom. Za lokalni dev host-pristup (curl
@@ -33,7 +33,7 @@ services:
       PORT: 8080
       HOST: 0.0.0.0
 
-      # Certilia OAuth (per-deploy values — set in Coolify UI)
+      # Certilia OAuth (per-deploy values, set in Coolify UI)
       CERTILIA_CLIENT_ID: ${CERTILIA_CLIENT_ID}
       CERTILIA_CLIENT_SECRET: ${CERTILIA_CLIENT_SECRET}
       CERTILIA_REDIRECT_URI: ${CERTILIA_REDIRECT_URI}
@@ -49,7 +49,7 @@ services:
       JWT_EXPIRY: ${JWT_EXPIRY:-1h}
       REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY:-7d}
 
-      # CORS — comma-separated list of Flutter app origins
+      # CORS: comma-separated list of Flutter app origins
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
 
       # Logging

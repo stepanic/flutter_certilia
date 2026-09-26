@@ -52,7 +52,7 @@ class _CertiliaWebViewScreen extends StatefulWidget {
 }
 
 class _CertiliaWebViewScreenState extends State<_CertiliaWebViewScreen> {
-  /// Page is rendered at 80% of native size — Certilia's auth UI is
+  /// Page is rendered at 80% of native size because Certilia's auth UI is
   /// designed for desktop and is too cramped at phone widths.
   static const double _pageZoom = 0.8;
 
@@ -128,7 +128,7 @@ class _CertiliaWebViewScreenState extends State<_CertiliaWebViewScreen> {
 
   void _popWithDelay(Uri? result) {
     // Small delay so the WebView finishes its in-flight navigation before we
-    // tear it down — otherwise we hit "Navigator: Cannot pop" on some platforms.
+    // tear it down; otherwise we hit "Navigator: Cannot pop" on some platforms.
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop(result);

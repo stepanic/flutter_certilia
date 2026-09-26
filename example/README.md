@@ -13,7 +13,7 @@ against a live `certilia-server` proxy.
 - Light / dark theme toggle, Croatian / English text
 
 The whole UI lives in `lib/certilia_auth/` and is intentionally outside
-the published SDK — the SDK ships API-only so it does not impose a
+the published SDK: the SDK ships API-only so it does not impose a
 design system. Copy-paste the parts you need.
 
 ## Running
@@ -80,13 +80,13 @@ flowchart LR
 
 ## Troubleshooting
 
-- **Login does nothing on web** — popup blocked. Allow popups for your
+- **Login does nothing on web**: popup blocked. Allow popups for your
   origin in the browser.
-- **`CertiliaNetworkException` on `/api/auth/initialize`** — proxy is
+- **`CertiliaNetworkException` on `/api/auth/initialize`**: proxy is
   down, URL is wrong, or proxy's CORS allow-list does not include
   your origin.
-- **"Authentication was cancelled"** — user closed the popup/WebView
+- **"Authentication was cancelled"**: user closed the popup/WebView
   before the flow finished.
-- **Logged in but UI shows login screen on hot restart** — was a real
+- **Logged in but UI shows login screen on hot restart**: this was a real
   bug in 0.1.x, fixed in 0.2.0. If still seen on 0.2.0+, file an
   issue at the [tracker](https://github.com/stepanic/flutter_certilia/issues).

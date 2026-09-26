@@ -1,5 +1,5 @@
 // Branding callback stranice (popup koji korisnik vidi par sekundi nakon eID
-// prijave). Sve dolazi iz env varijabli s generičkim defaultima — upstream
+// prijave). Sve dolazi iz env varijabli s generičkim defaultima: upstream
 // server ostaje brand-neutralan, a konzument (npr. DOMOVINA.ai) ga brandira
 // preko env-a (Coolify) bez forka. Vrijednosti se injectaju u callback.html
 // kroz renderCallbackTemplate ({{brand*}} placeholderi).

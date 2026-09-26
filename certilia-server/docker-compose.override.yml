@@ -1,4 +1,4 @@
-# Lokalni dev override — automatski se mergea kod `docker compose up` (BEZ -f).
+# Lokalni dev override: automatski se mergea kod `docker compose up` (BEZ -f).
 #
 # Coolify deploya s eksplicitnim `-f docker-compose.yml` pa OVAJ FILE IGNORIRA →
 # na Coolifyju NEMA host port bindinga (Traefik / Cloudflare Tunnel rutaju interno,

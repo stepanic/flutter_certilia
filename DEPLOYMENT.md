@@ -84,7 +84,7 @@ Each app gets its own deployed instance:
 4. Attach a different subdomain.
 
 The Flutter app only ever needs to know its own `CERTILIA_SERVER_URL`
-— no other coupling.
+and nothing else about the deployment.
 
 ### Local docker-compose
 
@@ -135,7 +135,7 @@ Run will get you to production faster.
 - [ ] `JWT_SECRET` and `SESSION_SECRET` are fresh random values
       (never the example placeholders). Each deploy has its own.
 - [ ] `CERTILIA_CLIENT_SECRET` is set via the Coolify UI, **not** in
-      a committed `.env` file. Repo's `.gitignore` covers `.env` —
+      a committed `.env` file. Repo's `.gitignore` covers `.env`;
       keep it that way.
 - [ ] `ALLOWED_ORIGINS` lists exactly the Flutter app origins you
       want. No wildcards.

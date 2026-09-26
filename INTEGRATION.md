@@ -37,7 +37,7 @@ Requirements: Dart `>=3.2.0`, Flutter `>=3.16.0`.
 ## 2. Configure the proxy URL
 
 The SDK only needs to know where your `certilia-server` lives.
-Don't bake that URL into your source — read it from `--dart-define`:
+Don't bake that URL into your source; read it from `--dart-define`:
 
 ```dart
 const _serverUrl = String.fromEnvironment(
@@ -92,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on CertiliaAuthenticationException {
       // user cancelled or upstream rejected
     } on CertiliaNetworkException catch (e) {
-      // HTTP error reaching the proxy — show e.statusCode / e.message
+      // HTTP error reaching the proxy: show e.statusCode / e.message
     }
   }
 
@@ -143,7 +143,7 @@ artwork, post-auth dashboard with user-info cards, language toggle, and
 the "what extended fields are available?" introspection card. Copy
 what you need, drop the rest.
 
-It does **not** ship in the SDK package — it's intentionally outside
+It does **not** ship in the SDK package; it's intentionally outside
 `lib/` so it doesn't constrain your design system.
 
 ## Troubleshooting checklist

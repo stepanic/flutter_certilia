@@ -51,7 +51,7 @@ flowchart LR
 
 The proxy holds the Certilia client_id / client_secret so the Flutter
 app never sees them. It also normalizes the userinfo response (Certilia
-production occasionally returns inconsistent shapes — the proxy falls
+production occasionally returns inconsistent shapes; the proxy then falls
 back to ID-token claims).
 
 ## API Endpoints
@@ -94,7 +94,7 @@ Body:
 The `access_token` field carries the previous access token so the
 server can extract the upstream Certilia tokens from its JWT claims.
 Older clients (pre-flutter_certilia 0.2.0) send this in the
-`Authorization: Bearer` header instead — the controller accepts both
+`Authorization: Bearer` header instead; the controller accepts both
 shapes.
 
 ### Get User Info

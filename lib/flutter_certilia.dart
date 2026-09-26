@@ -1,4 +1,4 @@
-/// flutter_certilia — Login with Certilia (Croatian eID via NIAS) for Flutter.
+/// flutter_certilia: Login with Certilia (Croatian eID via NIAS) for Flutter.
 ///
 /// The Flutter client talks to your backend proxy (`certilia-server`), which
 /// holds the Certilia client secret, or in direct mode to Certilia itself.

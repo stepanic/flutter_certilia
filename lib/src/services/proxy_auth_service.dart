@@ -14,7 +14,7 @@ import 'certilia_logger.dart';
 ///
 /// Owns every request the SDK makes against the proxy: OAuth init, polling
 /// session lifecycle (web), code-for-token exchange (with retry), refresh,
-/// user info, and extended info. Stateless — callers manage tokens.
+/// user info, and extended info. Stateless: callers manage tokens.
 class ProxyAuthService implements CertiliaAuthBackend {
   final String serverUrl;
   final http.Client _httpClient;
@@ -44,7 +44,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
   /// redirect itself (WebView and popup+polling flows).
   String get proxyCallbackUrl => '$serverUrl/api/auth/callback';
 
-  /// GET /api/auth/initialize — returns `authorization_url`, `state`, `session_id`.
+  /// GET /api/auth/initialize: returns `authorization_url`, `state`, `session_id`.
   ///
   /// [redirectUri] is where Certilia sends the browser after login. It
   /// defaults to [proxyCallbackUrl]. The proxy picks the Certilia client
@@ -70,7 +70,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  /// POST /api/auth/polling/start — web popup flow only.
+  /// POST /api/auth/polling/start: web popup flow only.
   Future<Map<String, dynamic>> startPollingSession({
     required String state,
     required String sessionId,
@@ -94,7 +94,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  /// GET /api/auth/polling/:id/status — web popup flow only.
+  /// GET /api/auth/polling/:id/status: web popup flow only.
   /// Returns the raw response shape (`status`, optional `result`, optional `error`).
   Future<Map<String, dynamic>?> pollStatus(String pollingId) async {
     final response = await _httpClient.get(
@@ -114,7 +114,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  /// POST /api/auth/exchange — code → tokens. Retries on transient failure.
+  /// POST /api/auth/exchange: code → tokens. Retries on transient failure.
   @override
   Future<Map<String, dynamic>> exchange({
     required String code,
@@ -151,7 +151,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
         }
         return jsonDecode(response.body) as Map<String, dynamic>;
       } on CertiliaNetworkException catch (e) {
-        // Non-200 responses are terminal — don't retry the server's "no".
+        // Non-200 responses are terminal; don't retry the server's "no".
         if (e.statusCode != 408) rethrow;
         lastError = e;
       } catch (e) {
@@ -170,7 +170,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
         );
   }
 
-  /// POST /api/auth/refresh — returns refreshed token bundle.
+  /// POST /api/auth/refresh: returns refreshed token bundle.
   ///
   /// Both tokens travel in the JSON body. Earlier versions of this SDK put
   /// the access token in the Authorization header; the server still accepts
@@ -204,7 +204,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  /// GET /api/auth/user — basic profile. Throws on non-200.
+  /// GET /api/auth/user: basic profile. Throws on non-200.
   @override
   Future<CertiliaUser> fetchUserInfo(String accessToken,
       {String? idToken}) async {
@@ -226,7 +226,7 @@ class ProxyAuthService implements CertiliaAuthBackend {
     return CertiliaUser.fromJson(json['user'] as Map<String, dynamic>);
   }
 
-  /// GET /api/user/extended-info — full profile.
+  /// GET /api/user/extended-info: full profile.
   ///
   /// Returns null on 401/502 to let callers decide whether to refresh the
   /// token and retry. Throws on other non-200 statuses.

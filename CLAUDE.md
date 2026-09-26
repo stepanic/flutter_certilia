@@ -1,6 +1,6 @@
-# flutter_certilia — onboarding za Claude
+# flutter_certilia: onboarding za Claude
 
-Sažet referent za buduće sesije rada na ovom repu. Ne aspiracije —
+Sažet referent za buduće sesije rada na ovom repu. Ne aspiracije,
 samo stvarno stanje koda.
 
 **Verzija:** 0.2.0 · **Datum posljednjeg refaktora:** svibanj 2026 ·
@@ -111,7 +111,7 @@ lib/
       certilia_extended_info.dart          # puni profil
     exceptions/
       certilia_exception.dart              # hijerarhija iznimaka
-example/                                   # demo aplikacija — copy-paste-ready UI
+example/                                   # demo aplikacija, copy-paste-ready UI
 certilia-server/                           # Node.js proxy
 test/                                      # unit testovi (46 prolaze)
 ```
@@ -234,20 +234,21 @@ services** (HTTP, storage, logger), **platforma-specifični UI**
 
 - Sve HTTP komunikacije idu kroz `CertiliaAuthBackend`
   (`ProxyAuthService` ili `DirectAuthService`). Ne dodaj direktan
-  `http.get/post` u klijente — zaobilazi retry/timeout/error policy.
+  `http.get/post` u klijente jer zaobilazi retry/timeout/error policy.
 - Sva token persistencija ide kroz `TokenStorageService`. Ne pristupaj
   `FlutterSecureStorage` direktno (cache key konzistentnost).
-- Sva logiranja kroz `CertiliaLogger` — gated na `config.enableLogging`.
-- Custom HTTP headeri se **ne** šalju na webu — trigaju CORS preflight
+- Sva logiranja kroz `CertiliaLogger`, koji ispisuje samo kad je
+  `config.enableLogging` uključen.
+- Custom HTTP headeri se **ne** šalju na webu jer trigaju CORS preflight
   koji server ne dozvoljava. Vidi komentar u
   `ProxyAuthService._baseHeaders`.
 - Konstruktori `CertiliaWebClient` i `CertiliaStatefulWrapper`
   pokreću `_initializeTokens()/_initializeState()` u `_ready` future.
-  Sve async public metode počinju s `await _ready;` — nemoj to ukloniti
+  Sve async public metode počinju s `await _ready;`. Nemoj to ukloniti
   (race koji se vraćao na svaki hot restart).
 - Refresh flow šalje oba tokena u JSON body, ne u Authorization header.
   Server (`authController.refreshToken`) fallback prihvaća header za
-  backward compat — nemoj se osloniti na to za nove klijente.
+  backward compat, ali nemoj se osloniti na to za nove klijente.
 
 ## Razvojni protokol
 

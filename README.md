@@ -13,7 +13,7 @@ i Webu.
 ## Architecture
 
 The SDK is **proxy-only**. The Flutter client never talks to Certilia
-directly — all OAuth communication is mediated by a backend
+directly: all OAuth communication is mediated by a backend
 (`certilia-server`, included in this repo) that holds the OAuth
 credentials.
 
@@ -91,8 +91,8 @@ Requirements: Dart `>=3.2.0`, Flutter `>=3.16.0`.
 
 ## Usage
 
-The SDK has one entry point. The proxy URL is the only required value
-— everything else is sensible defaults you can override.
+The SDK has one entry point. The proxy URL is the only required value;
+everything else has defaults you can override.
 
 ```dart
 import 'package:flutter_certilia/flutter_certilia.dart';
@@ -127,7 +127,7 @@ flutter run --dart-define=CERTILIA_SERVER_URL=https://your-proxy.example
 ### UI
 
 `flutter_certilia` ships **API-only**. There are no opinionated widgets
-or themes — your app keeps full control of its design system.
+or themes; your app keeps full control of its design system.
 [`example/lib/certilia_auth/`](example/lib/certilia_auth/) is a working
 reference UI (login button, authenticated view, user-info cards, theme
 toggle) that you can copy-paste and adapt.
@@ -306,7 +306,7 @@ emulator with an App Link callback; no request reached a server of ours.
 | `CertiliaDirectClient` | Certilia client id/secret for [direct mode](#direct-mode-no-server) |
 | `CertiliaUser` | Basic user profile (`sub`, `firstName`, `lastName`, `oib`, `email`, ...) |
 | `CertiliaToken` | Access/refresh/ID tokens + expiry helpers |
-| `CertiliaExtendedInfo` | Full Certilia profile — any field the upstream returned |
+| `CertiliaExtendedInfo` | Full Certilia profile: any field the upstream returned |
 | `CertiliaException` | Base exception; subclasses below |
 | `CertiliaAuthenticationException` | OAuth flow failed |
 | `CertiliaNetworkException` | HTTP-level failure with `statusCode` |
@@ -345,7 +345,7 @@ try {
   platform plugin if you need it.
 
 The `certilia-server` proxy that the SDK talks to is in this repo at
-[`certilia-server/`](certilia-server/) — see its README for setup,
+[`certilia-server/`](certilia-server/). See its README for setup,
 environment variables, and the supported endpoint contract.
 
 ## Troubleshooting
@@ -357,12 +357,12 @@ environment variables, and the supported endpoint contract.
 - **"Authentication was cancelled"**: the user closed the popup,
   WebView or browser tab before finishing. Check the DevTools console /
   device logs.
-- **`CertiliaNetworkException` on `/api/auth/initialize`** — the
+- **`CertiliaNetworkException` on `/api/auth/initialize`**: the
   proxy URL is wrong, the proxy is down, or CORS is blocking your
   origin. `enableLogging: true` plus the browser network tab will
   point at the actual failing request.
 - **Logged in but `getCurrentUser()` returns null right after hot
-  restart** — was a real bug pre-0.2.0; the constructor's init
+  restart**: this was a real bug pre-0.2.0; the constructor's init
   future is now awaited before any public method runs. If you still
   see it, file an issue.
 
@@ -376,7 +376,7 @@ environment variables, and the supported endpoint contract.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT; see [LICENSE](LICENSE).
 
 ## Support
 

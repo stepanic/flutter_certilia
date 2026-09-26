@@ -129,7 +129,7 @@ abstract class CertiliaNativeClient {
   }
 
   /// Fetches basic user info using the supplied access token.
-  /// Returns null on failure rather than throwing — callers expect this.
+  /// Returns null on failure rather than throwing; callers expect this.
   Future<CertiliaUser?> getUserInfo(String accessToken,
       {String? idToken}) async {
     try {

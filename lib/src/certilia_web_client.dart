@@ -83,7 +83,7 @@ class CertiliaWebClient {
     _currentToken = await _tokenStorage.loadToken();
     if (_currentToken != null) {
       _logger.log(_currentToken!.isExpired
-          ? 'Loaded saved token (expired — caller decides)'
+          ? 'Loaded saved token (expired; caller decides)'
           : 'Loaded saved authentication token');
     }
   }
@@ -481,7 +481,7 @@ class CertiliaWebClient {
     );
     if (info != null) return info;
 
-    // 401/502 — try to refresh once.
+    // 401/502: try to refresh once.
     if (_currentToken!.refreshToken == null) {
       await logout();
       return null;

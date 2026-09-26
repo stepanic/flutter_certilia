@@ -195,7 +195,7 @@ class CertiliaStatefulWrapper {
         value: jsonEncode(user.toJson()),
       );
     } catch (_) {
-      // Silent — best-effort cache.
+      // Silent: best-effort cache.
     }
   }
 
