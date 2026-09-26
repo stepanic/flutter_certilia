@@ -141,9 +141,12 @@ void main() {
       });
 
       expect(user1, equals(user2));
-      // Equal users can have different hash codes: hashCode includes
-      // raw.hashCode, and a Map's hashCode is its identity.
-      // expect(user1.hashCode, equals(user2.hashCode));
+      expect(user1.hashCode, equals(user2.hashCode));
+      // Same claims in another order: still equal, same hash.
+      final reordered = CertiliaUser.fromJson(
+          Map.fromEntries(testJson.entries.toList().reversed));
+      expect(reordered, equals(user1));
+      expect(reordered.hashCode, equals(user1.hashCode));
       expect(user1, isNot(equals(user3)));
     });
 

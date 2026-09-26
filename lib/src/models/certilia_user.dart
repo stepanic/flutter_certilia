@@ -149,7 +149,10 @@ class CertiliaUser {
       oib.hashCode ^
       dateOfBirth.hashCode ^
       email.hashCode ^
-      raw.hashCode;
+      // Same comparison as mapEquals in ==: keys and values by ==, any order.
+      // raw.hashCode would be the Map's identity.
+      Object.hashAllUnordered(
+          raw.entries.map((e) => Object.hash(e.key, e.value)));
 
   @override
   String toString() {
