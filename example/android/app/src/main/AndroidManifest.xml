@@ -1,7 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Internet permission for OAuth -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Keep app running in background during OAuth -->
+    <!-- Neither the SDK nor the example takes a wake lock. A wake lock keeps
+         the CPU awake; it does not stop Android from killing the app in the
+         background during a login. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     
     <application
@@ -29,6 +30,31 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- flutter_web_auth_2 receives the Certilia redirect here when the
+             SDK runs with callbackUrl (system-browser flow). -->
+        <activity
+            android:name="com.linusu.flutter_web_auth_2.CallbackActivity"
+            android:exported="true"
+            android:taskAffinity="">
+            <!-- Custom scheme, e.g. callbackUrl = hr.elint.certiliademo:1/callback -->
+            <intent-filter android:label="flutter_web_auth_2">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="hr.elint.certiliademo" />
+            </intent-filter>
+            <!-- https App Link, verified through
+                 https://certilia.elint-elektroinstalacije.hr/.well-known/assetlinks.json -->
+            <intent-filter android:autoVerify="true" android:label="flutter_web_auth_2">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="certilia.elint-elektroinstalacije.hr"
+                    android:path="/app/certilia_callback.html" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

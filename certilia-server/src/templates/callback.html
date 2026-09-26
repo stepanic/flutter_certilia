@@ -194,7 +194,7 @@
         {{/if}}
     </div>
     
-    <!-- Data for mobile app parsing -->
+    <!-- Read by callback.js -->
     <div class="app-data">
         <div id="oauth-success">{{success}}</div>
         <div id="oauth-code">{{code}}</div>
@@ -206,8 +206,7 @@
     <!-- Hidden element for deep link -->
     <div id="deep-link" style="display: none;" data-link="{{deepLink}}">{{deepLink}}</div>
     
-    <!-- External scripts to avoid CSP issues -->
+    <!-- A separate file: the CSP (script-src 'self') blocks inline scripts. -->
     <script src="/callback.js"></script>
-    <!-- Removed callback-alternative.js and callback-redirect.js as we use polling approach -->
 </body>
 </html>

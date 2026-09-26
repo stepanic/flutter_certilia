@@ -5,7 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/certilia_token.dart';
 
-/// Service for managing token storage across all client implementations.
+/// Reads, writes and deletes the saved [CertiliaToken] in secure storage.
+/// Every client stores its token through this class.
 class TokenStorageService {
   static const String _tokenStorageKey = 'certilia_token';
 

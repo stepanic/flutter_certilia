@@ -36,14 +36,12 @@ export const getExtendedUserInfo = async (req, res, next) => {
     const skipUserInfo = process.env.SKIP_USERINFO_ENDPOINT === 'true';
     console.log('DEBUG 6: skipUserInfo:', skipUserInfo);
 
-    // Check if we should skip userinfo endpoint
     if (skipUserInfo) {
       console.log('DEBUG 7: Skipping userinfo endpoint, using JWT claims');
       // Use user data already in JWT (from ID token that was decoded during authentication)
       source = 'jwt_claims';
       logger.info('Skipping userinfo endpoint in production, using JWT claims');
 
-      // User info is already in req.user from JWT
       if (req.user) {
         console.log('DEBUG 8: Using user data from JWT');
         console.log('DEBUG 9: JWT user keys:', Object.keys(req.user));
@@ -58,8 +56,8 @@ export const getExtendedUserInfo = async (req, res, next) => {
           return acc;
         }, {});
 
-        // Ensure standard fields are properly mapped
-        // Note: 'sub' is actually the OIB in Croatian eID
+        // Fill the standard field names from their alternatives. Certilia's
+        // portal clients send the OIB as `sub` and no `pin` claim.
         userInfo.oib = userInfo.oib || userInfo.pin || userInfo.sub;
         userInfo.given_name = userInfo.given_name || userInfo.firstName;
         userInfo.family_name = userInfo.family_name || userInfo.lastName;
@@ -93,7 +91,8 @@ export const getExtendedUserInfo = async (req, res, next) => {
         });
       } catch (error) {
         console.log('DEBUG 19: getUserInfo threw error:', error.message);
-        // Check if this is specifically a token binding issue or if userinfo endpoint fails
+        // Fall back to the JWT claims on the token-binding error and on any
+        // 400 or invalid_request from the userinfo endpoint.
         const shouldUseFallback =
           error.message === 'USE_ID_TOKEN_FALLBACK' ||
           error.response?.data?.error_description?.includes('token binding') ||
@@ -123,8 +122,7 @@ export const getExtendedUserInfo = async (req, res, next) => {
               return acc;
             }, {});
 
-            // Ensure standard fields are properly mapped
-            // Note: 'sub' is actually the OIB in Croatian eID
+            // Same field mapping as above.
             userInfo.oib = userInfo.oib || userInfo.pin || userInfo.sub;
             userInfo.given_name = userInfo.given_name || userInfo.firstName;
             userInfo.family_name = userInfo.family_name || userInfo.lastName;
@@ -142,7 +140,6 @@ export const getExtendedUserInfo = async (req, res, next) => {
           }
         } else {
           console.log('DEBUG 29: Not using fallback, re-throwing error');
-          // For other errors, just throw
           throw error;
         }
       }
@@ -152,7 +149,7 @@ export const getExtendedUserInfo = async (req, res, next) => {
     console.log('DEBUG 31: userInfo keys:', userInfo ? Object.keys(userInfo) : 'null');
     console.log('DEBUG 32: source:', source);
 
-    // Convert userInfo keys to snake_case for consistent API response
+    // The response uses snake_case keys throughout.
     const snakeCaseUserInfo = convertKeysToSnakeCase(userInfo);
 
     // Create available fields in snake_case

@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { parseClients } from './clients.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -24,6 +25,8 @@ export const config = {
     userInfoEndpoint: process.env.CERTILIA_USERINFO_ENDPOINT || '/oauth2/userinfo',
     discoveryEndpoint: process.env.CERTILIA_DISCOVERY_ENDPOINT || '/oauth2/oidcdiscovery/.well-known/openid-configuration',
     scopes: ['openid', 'profile', 'eid', 'email', 'offline_access'],
+    // All registered clients, default first. See ./clients.js.
+    clients: parseClients(process.env),
   },
   
   // Security Configuration

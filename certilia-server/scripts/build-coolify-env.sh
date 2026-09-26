@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-coolify-env.sh — offline generator Coolify ENV bundle-a za certilia-server.
+# build-coolify-env.sh: offline generator Coolify ENV bundle-a za certilia-server.
 #
 # Workflow:
 #   1) cp .coolify-secrets.env.example .coolify-secrets.env   (gitignored)
@@ -110,7 +110,7 @@ if [ "$COPY" = true ]; then
   if command -v pbcopy >/dev/null; then printf '%s\n' "$MERGED" | pbcopy
   elif command -v wl-copy >/dev/null; then printf '%s\n' "$MERGED" | wl-copy
   elif command -v xclip >/dev/null; then printf '%s\n' "$MERGED" | xclip -selection clipboard
-  else echo "⚠️ nema pbcopy/wl-copy/xclip — koristi --preview --no-copy" >&2; exit 1
+  else echo "⚠️ nema pbcopy/wl-copy/xclip; koristi --preview --no-copy" >&2; exit 1
   fi
   echo "✅ ENV bundle u clipboardu ($(printf '%s\n' "$MERGED" | grep -c '=') varijabli). Paste u Coolify → Save → Redeploy." >&2
 fi

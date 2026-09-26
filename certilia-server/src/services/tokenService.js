@@ -117,6 +117,30 @@ class TokenService {
   }
 
   /**
+   * Verify an access token's signature and type but accept it after expiry,
+   * for /refresh: the claims to carry over come from the access token, and
+   * it has usually expired by then. Throws AuthenticationError for a forged
+   * or non-access token.
+   * @param {string} token - JWT access token
+   * @returns {Object} Decoded token payload
+   */
+  verifyExpiredAccessToken(token) {
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret, {
+        algorithms: ['HS256'],
+        ignoreExpiration: true,
+      });
+    } catch (error) {
+      throw new AuthenticationError('Invalid access token');
+    }
+    if (decoded.type !== 'access') {
+      throw new AuthenticationError('Invalid token type');
+    }
+    return decoded;
+  }
+
+  /**
    * Decode token without verification (for debugging)
    * @param {string} token - JWT token
    * @returns {Object} Decoded token
@@ -146,8 +170,8 @@ class TokenService {
     try {
       const decoded = this.verifyToken(refreshToken, 'refresh');
       
-      // Generate new token pair with the same user info
-      // In a real app, you might want to fetch fresh user data
+      // The new pair carries only `sub`: the refresh token holds no other
+      // user data.
       const newTokenPair = this.generateTokenPair({
         sub: decoded.sub,
       });

@@ -1,4 +1,4 @@
-# flutter_certilia — Plan refaktora
+# flutter_certilia: Plan refaktora
 
 **Cilj:** Pretvoriti postojeću `flutter_certilia` biblioteku u čist, reusable "Login with Certilia" SDK temeljen **isključivo na proxy server arhitekturi**, koji se može povući kao dependency u drugu Flutter aplikaciju.
 
@@ -9,23 +9,37 @@
 
 ## Kontekst: što je već isprobano i odbačeno
 
-Git historija pokazuje da postoji **samo jedan stabilan put** za Certilia OAuth na svim platformama: **server-side proxy + WebView (mobile) ili popup+polling (web)**.
+Izvorni plan je iz git historije zaključio da postoji **samo jedan stabilan put** za Certilia OAuth na svim platformama: **server-side proxy + WebView (mobile) ili popup+polling (web)**. Revizija ispod pokazuje da razlozi u ovoj tablici nisu točni.
 
 | Pristup | Status | Razlog odustanka |
 |---|---|---|
 | **Native AppAuth** (Custom Tabs / ASWebAuthenticationSession) | Mrtav kod | Certilia prihvaća samo HTTPS redirect URI-je, ne custom URL scheme (`com.app://oauth`). Blokada na strani Certilije. |
-| **Manual OAuth + system browser (`url_launcher`)** | Mrtav kod | Isti problem — traži custom URL scheme za povratak. |
-| **Direktni OAuth iz Flutter klijenta** | Napušten | Zahtijeva hardkodiranje `client_id`/`client_secret` u aplikaciji; Certilia userinfo endpoint nepouzdan (vidi commiti `1865dbc`, `9184ffd`, `d6c3e32` — sve serverside fallbackovi). |
+| **Manual OAuth + system browser (`url_launcher`)** | Mrtav kod | Isti problem: traži custom URL scheme za povratak. |
+| **Direktni OAuth iz Flutter klijenta** | Napušten | Zahtijeva hardkodiranje `client_id`/`client_secret` u aplikaciji; Certilia userinfo endpoint nepouzdan (vidi commiti `1865dbc`, `9184ffd`, `d6c3e32`, sve serverside fallbackovi). |
 | **Web popup s `window.postMessage`** | Napušten | Cross-origin policy + Croatian eID flow nepouzdano dostavljao poruke. Zamijenjeno server-side polling-om (`ef67fa4`). |
 | **WebView direktno na Certilia (bez proxy-ja)** | Napušten | Android WebView "HTTP client closed", background network problemi, certifikati. Stabilizirano tek kroz proxy. |
 
-**Posljedica:** Sav kod vezan uz prve četiri opcije je mrtav i može se izbrisati bez gubitka funkcionalnosti.
+### Revizija 2026-09-26
+
+Razlozi u tablici gore nisu bili provjereni prema Certiliji. Ponovno
+testirano pravim eID loginima (Chrome, Safari na iOS 18) i izravnim
+pozivima na `idp.certilia.com`:
+
+| Pristup | Stvarno stanje |
+|---|---|
+| Native AppAuth / sistemski browser | Moguće. IDP poštuje custom scheme (`hr.example.app:1/callback`; portal ga prihvaća zbog buga u regexu iako piše "Only HTTPS is allowed"); https App Link / Universal Link portal dopušta. Testirano pravim loginom na Android 16 emulatoru (Chrome 133) za oba callbacka: custom scheme i verificirani App Link. iOS nativno nije testirano. Implementirano kao `CertiliaBrowserClient`; `preferEphemeral` se na Androidu ne šalje jer s njim flutter_web_auth_2 ostavlja Custom Tab otvoren iznad aplikacije. |
+| `url_launcher` + system browser | Razlog nije bio točan: taj klijent je koristio HTTPS callback proxyja, ne custom scheme. Pokriven s `CertiliaBrowserClient`. |
+| Direktni OAuth bez proxyja | Moguće, uz javni secret. Token endpoint bez secreta vraća `invalid_client`, ali sa secretom radi i iz browsera (CORS dopušten), a ID token se provjerava protiv javnog JWKS-a. Testirano pravim loginom u Chromeu i na Android emulatoru, bez ijednog poziva serveru. Implementirano kao direct mode (`CertiliaDirectClient`), samo s https callbackom. Userinfo nije "nepouzdan": token je vezan za `atbv` cookie u browseru (token binding), claimovi dolaze iz ID tokena. Refresh ne radi nigdje (`invalid_grant`). |
+| Popup s `window.opener.postMessage` | Stoji: pod `Cross-Origin-Opener-Policy: same-origin` popup ima `window.opener === null`. Isti cilj (popup bez pollinga) postignut callback stranicom na originu aplikacije + BroadcastChannel/localStorage. Popup + polling je uklonjen: code je dobivao onaj tko pollira, pa i netko tko je sam pokrenuo login i korisniku poslao link. |
+| WebView bez proxyja | Zabilježene greške bile su između aplikacije i ngroka, ne Certilije; WebView i danas izravno otvara Certiliju. "Bez proxyja" je nemoguće samo zbog client secreta. |
+
+**Posljedica za Fazu 0:** kod vezan uz prve četiri opcije nitko nije koristio, pa se mogao izbrisati bez gubitka funkcionalnosti. Browser i direct tok kasnije su napisani iznova (`CertiliaBrowserClient`, `DirectAuthService`).
 
 ---
 
 ## Analiza kvalitete (polazna točka)
 
-Pune ocjene po područjima (vidi pravo memory za detalje):
+Ocjene po područjima:
 
 | Područje | Ocjena | Glavni nalaz |
 |---|---|---|
@@ -33,39 +47,39 @@ Pune ocjene po područjima (vidi pravo memory za detalje):
 | Sigurnost | C- | Nema validacije `state`, ngrok cert bypass u prod kodu, refresh token u headeru |
 | Testiranje | F | ~66 linija stvarnih testova, zero coverage za OAuth flow |
 | Dependencies | C+ | Min Dart `>=2.19.0` (siječanj 2023, 3+ god star) |
-| Docs vs kod | D | CLAUDE.md tvrdi PKCE/session timeout/env config — ništa nije implementirano |
+| Docs vs kod | D | CLAUDE.md tvrdi PKCE/session timeout/env config, a ništa od toga nije implementirano |
 
-**Ukupna ocjena: D+** — beta, nije production-ready, ali jezgra (proxy + WebView/popup) radi.
+**Ukupna ocjena: D+**. Beta, nije production-ready, ali jezgra (proxy + WebView/popup) radi.
 
 ---
 
 ## Princip refaktora
 
-1. **Inkrementalno** — svaka faza ostavlja aplikaciju u radnom stanju, testirano u Chrome-u prije commita.
-2. **Bez novih značajki** — fokus isključivo na kvalitetu i pripremu za reuse. Nikakvi dodatni endpointi ili UI promjene.
-3. **Sigurne pobjede prvo** — brisanje mrtvog koda ne mijenja runtime ponašanje, ide prvo.
+1. **Inkrementalno**: svaka faza ostavlja aplikaciju u radnom stanju, testirano u Chrome-u prije commita.
+2. **Bez novih značajki**: fokus isključivo na kvalitetu i pripremu za reuse. Nikakvi dodatni endpointi ili UI promjene.
+3. **Sigurne pobjede prvo**: brisanje mrtvog koda ne mijenja runtime ponašanje, ide prvo.
 4. **Cilj svake faze:** smanjenje rizika ili priprema za sljedeću fazu.
 
 ---
 
 ## Faze
 
-### Faza 0 — Brisanje mrtvog koda (1 dan)
+### Faza 0: Brisanje mrtvog koda (1 dan)
 
 **Cilj:** smanjiti codebase za ~40% uklanjanjem nedohvatljivog koda.
 
 **Akcije:**
-- Obriši `lib/src/certilia_appauth_client.dart` (480 lc) — blokirano od Certilije
-- Obriši `lib/src/certilia_manual_oauth_client.dart` (652 lc) — isti razlog
-- Obriši `lib/src/certilia_sdk.dart` (100 lc) — direktni OAuth, nikad u produkciji
-- Obriši `lib/src/certilia_universal_client.dart` (74 lc) — postojao samo za AppAuth/Manual switch
+- Obriši `lib/src/certilia_appauth_client.dart` (480 lc), blokirano od Certilije
+- Obriši `lib/src/certilia_manual_oauth_client.dart` (652 lc), isti razlog
+- Obriši `lib/src/certilia_sdk.dart` (100 lc), direktni OAuth, nikad u produkciji
+- Obriši `lib/src/certilia_universal_client.dart` (74 lc), postojao samo za AppAuth/Manual switch
 - Obriši `lib/src/certilia_sdk_factory.dart` + `_web.dart` (25 lc)
-- Obriši `lib/src/certilia_client.dart` (352 lc) — deprecirano, čekalo v1.0
-- Obriši `lib/src/certilia_client_stub.dart` (28 lc) — stub za conditional imports koji više ne postoji
-- Obriši `lib/src/models/certilia_config.dart` (186 lc) — zamijenjeno s `CertiliaConfigSimple`
+- Obriši `lib/src/certilia_client.dart` (352 lc), deprecirano, čekalo v1.0
+- Obriši `lib/src/certilia_client_stub.dart` (28 lc), stub za conditional imports koji više ne postoji
+- Obriši `lib/src/models/certilia_config.dart` (186 lc), zamijenjeno s `CertiliaConfigSimple`
 - Obriši obsolete dokumente: `APPAUTH_MIGRATION.md`, `APPAUTH_STATUS.md`, `DEEPLINK_SETUP.md`, `SDK_INTEGRATION_PLAN.md`
 - Ažuriraj `lib/flutter_certilia.dart` exporte (ukloni reference na obrisano)
-- Ažuriraj `lib/src/certilia_sdk_simple.dart` — ukloni konverziju u puni `CertiliaConfig`, koristi `CertiliaConfigSimple` direktno
+- Ažuriraj `lib/src/certilia_sdk_simple.dart`: ukloni konverziju u puni `CertiliaConfig`, koristi `CertiliaConfigSimple` direktno
 
 **Rezultat:** ~2 klijenta (`CertiliaWebViewClient` mobile/desktop + `CertiliaWebClient` web) + `CertiliaStatefulWrapper` + 4 modela. Public API: jedna klasa + 5 modela.
 
@@ -73,7 +87,7 @@ Pune ocjene po područjima (vidi pravo memory za detalje):
 
 ---
 
-### Faza 1 — Konsolidacija (2-3 dana)
+### Faza 1: Konsolidacija (2-3 dana)
 
 **Cilj:** maknuti ~300 lc duplikata između dva preostala klijenta.
 
@@ -91,27 +105,27 @@ Pune ocjene po područjima (vidi pravo memory za detalje):
   - Popup dimensije (web)
 - Preimenuj `CertiliaSDKSimple` → `CertiliaSDK` (jedini ulaz, "Simple" sufiks više nema smisla); zadrži typedef `CertiliaSDKSimple = CertiliaSDK` za 0.x backward-compat.
 
-**Verifikacija:** Chrome auth flow + token refresh + logout — manual test.
+**Verifikacija:** Chrome auth flow + token refresh + logout, manual test.
 
 ---
 
-### Faza 2 — Sigurnost i robusnost (2-3 dana)
+### Faza 2: Sigurnost i robusnost (2-3 dana)
 
 **Cilj:** zatvoriti realne rupe pronađene u analizi.
 
 **Akcije:**
-1. **Validacija `state` parametra** — klijent mora usporediti `state` u callback URL-u s onim koji je vratio `/initialize`. Trenutno se samo provlači, ne provjerava.
-2. **Refresh token u POST body** — sada se šalje u `Authorization: Bearer <refresh_token>` headeru (semantički krivo). Promijeni u oba klijenta. **Napomena:** trebat će uskladiti s `certilia-server` repom — vidi otvoreno pitanje.
-3. **Ngrok cert bypass iza `kDebugMode`** — `manual_oauth_client.dart:63-66` (ako preživi Phase 0; vjerojatno bude obrisan). Provjeri da nigdje drugdje nije.
-4. **Async init race** — `CertiliaStatefulWrapper` konstruktor zove `_initializeTokens()` bez await-a. Refaktoriraj na lazy-init pattern: čuvaj `_initFuture`, sve public metode `await _initFuture` prije nego što rade bilo što.
-5. **`sessionTimeout` enforcement** — ili implementiraj (kompariraj `tokenExpiry` s `now + sessionTimeout`, force-logout iznad praga), ili izbaci iz public API-ja. Trenutno je dead config.
-6. **Cleanup timera u dispose-u** — sve `Timer?` varijable u `CertiliaWebClient` moraju biti cancelled u `dispose()` i na error path-evima.
+1. **Validacija `state` parametra**: klijent mora usporediti `state` u callback URL-u s onim koji je vratio `/initialize`. Trenutno se samo provlači, ne provjerava.
+2. **Refresh token u POST body**: sada se šalje u `Authorization: Bearer <refresh_token>` headeru (semantički krivo). Promijeni u oba klijenta. **Napomena:** trebat će uskladiti s `certilia-server` repom; vidi otvoreno pitanje.
+3. **Ngrok cert bypass iza `kDebugMode`**: `manual_oauth_client.dart:63-66` (ako preživi Phase 0; vjerojatno bude obrisan). Provjeri da nigdje drugdje nije.
+4. **Async init race**: `CertiliaStatefulWrapper` konstruktor zove `_initializeTokens()` bez await-a. Refaktoriraj na lazy-init pattern: čuvaj `_initFuture`, sve public metode `await _initFuture` prije nego što rade bilo što.
+5. **`sessionTimeout` enforcement**: ili implementiraj (kompariraj `tokenExpiry` s `now + sessionTimeout`, force-logout iznad praga), ili izbaci iz public API-ja. Trenutno je dead config.
+6. **Cleanup timera u dispose-u**: sve `Timer?` varijable u `CertiliaWebClient` moraju biti cancelled u `dispose()` i na error path-evima.
 
-**Verifikacija:** Chrome auth flow, force-refresh, force-logout, kill-and-restart — manual test.
+**Verifikacija:** Chrome auth flow, force-refresh, force-logout, kill-and-restart, manual test.
 
 ---
 
-### Faza 3 — Testovi (2-3 dana)
+### Faza 3: Testovi (2-3 dana)
 
 **Cilj:** 60%+ line coverage na `lib/src/`, integracija provjerena.
 
@@ -127,13 +141,13 @@ Pune ocjene po područjima (vidi pravo memory za detalje):
   - Network timeout → retry s backoff
   - Expired token detection
 - `TokenStorageService` testovi (save/load/clear)
-- Widget test za `CertiliaWebViewClient` minimal — bar dispose lifecycle, ne treba simulirati WebView
+- Widget test za `CertiliaWebViewClient` minimal: bar dispose lifecycle, ne treba simulirati WebView
 
 **Verifikacija:** `flutter test` zelen, coverage report.
 
 ---
 
-### Faza 4 — Priprema za reuse u drugoj aplikaciji (1-2 dana)
+### Faza 4: Priprema za reuse u drugoj aplikaciji (1-2 dana)
 
 **Cilj:** SDK se može povući u drugu app i raditi za 5 minuta.
 
@@ -152,7 +166,7 @@ Pune ocjene po područjima (vidi pravo memory za detalje):
 
 ---
 
-### Faza 5 — Dokumentacija (1 dan)
+### Faza 5: Dokumentacija (1 dan)
 
 **Cilj:** docs odražavaju kod, ništa lažno ne piše.
 
@@ -168,12 +182,12 @@ Pune ocjene po područjima (vidi pravo memory za detalje):
 
 | Faza | Trajanje | Rizik | Vrijednost |
 |---|---|---|---|
-| 0 — brisanje | 1 dan | Nizak | Visoka (jasnoća) |
-| 1 — konsolidacija | 2-3 dana | Srednji | Visoka |
-| 2 — sigurnost | 2-3 dana | Srednji | **Kritična** |
-| 3 — testovi | 2-3 dana | Nizak | Visoka (reusability) |
-| 4 — reuse | 1-2 dana | Nizak | **Kritična** (krajnji cilj) |
-| 5 — docs | 1 dan | Nizak | Srednja |
+| 0: brisanje | 1 dan | Nizak | Visoka (jasnoća) |
+| 1: konsolidacija | 2-3 dana | Srednji | Visoka |
+| 2: sigurnost | 2-3 dana | Srednji | **Kritična** |
+| 3: testovi | 2-3 dana | Nizak | Visoka (reusability) |
+| 4: reuse | 1-2 dana | Nizak | **Kritična** (krajnji cilj) |
+| 5: docs | 1 dan | Nizak | Srednja |
 
 **Ukupno: ~10-13 radnih dana.**
 

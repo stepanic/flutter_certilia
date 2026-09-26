@@ -20,7 +20,7 @@ router.get(
 
 /**
  * @route GET /auth/callback
- * @desc OAuth callback endpoint (called by Certilia)
+ * @desc OAuth callback endpoint (Certilia redirects the browser here)
  * @query {string} code - Authorization code
  * @query {string} state - State parameter
  * @returns {HTML} Success page with embedded auth data
@@ -52,23 +52,5 @@ router.post(
   validate(schemas.refreshToken),
   authController.refreshToken
 );
-
-
-/**
- * @route POST /auth/polling/start
- * @desc Start polling session for cross-origin auth
- * @body {string} state - OAuth state
- * @body {string} session_id - Session ID
- * @returns {Object} Polling session info
- */
-router.post('/polling/start', authController.startPolling);
-
-/**
- * @route GET /auth/polling/:polling_id/status
- * @desc Check polling session status
- * @param {string} polling_id - Polling session ID
- * @returns {Object} Session status and result
- */
-router.get('/polling/:polling_id/status', authController.checkPollingStatus);
 
 export default router;

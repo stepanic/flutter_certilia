@@ -1,8 +1,9 @@
 // Branding callback stranice (popup koji korisnik vidi par sekundi nakon eID
-// prijave). Sve dolazi iz env varijabli s generičkim defaultima — upstream
-// server ostaje brand-neutralan, a konzument (npr. DOMOVINA.ai) ga brandira
-// preko env-a (Coolify) bez forka. Vrijednosti se injectaju u callback.html
-// kroz renderCallbackTemplate ({{brand*}} placeholderi).
+// prijave). Sve dolazi iz env varijabli s generičkim defaultima: server u
+// ovom repu nema vlastiti brand, a aplikacija koja ga deploya (npr.
+// DOMOVINA.ai) postavlja svoj kroz env varijable (Coolify), bez forka.
+// Vrijednosti ulaze u callback.html kroz renderCallbackTemplate ({{brand*}}
+// placeholderi).
 
 const DEFAULTS = {
   brandName: '',
@@ -17,7 +18,8 @@ const DEFAULTS = {
   brandErrorColor: '#ef4444',
   brandTextColor: '#1f2937',
   brandMutedColor: '#6b7280',
-  // Tekstovi (lokalizacija / brand glas). Default EN; konzument može HR.
+  // Tekstovi stranice. Defaulti su na engleskom; deploy ih može postaviti na
+  // hrvatski.
   brandSuccessTitle: 'Authentication Successful',
   brandSuccessMessage: 'You can close this window and return to the app.',
   brandCloseButton: 'Close Window',

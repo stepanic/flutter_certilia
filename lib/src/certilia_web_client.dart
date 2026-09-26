@@ -1,5 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 import 'dart:async';
+import 'dart:convert';
+import 'dart:js_interop';
 // ignore: deprecated_member_use
 import 'package:web/web.dart' as web;
 
@@ -10,58 +12,71 @@ import 'models/certilia_config.dart';
 import 'models/certilia_extended_info.dart';
 import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
+import 'oauth_callback.dart';
+import 'refresh_errors.dart';
 import 'services/certilia_logger.dart';
-import 'services/proxy_auth_service.dart';
+import 'services/auth_backend_factory.dart';
+import 'services/certilia_auth_backend.dart';
 import 'services/token_storage_service.dart';
 
 /// Web-specific client for Certilia OAuth authentication.
 ///
-/// Opens a popup window for the auth flow and polls the proxy server for
-/// completion (browser cross-origin policies make `postMessage` unreliable
-/// with Croatian eID flows — see project history).
+/// Opens a popup window for the login. Certilia redirects it to
+/// [CertiliaConfig.callbackUrl], a page on the app's own origin (see
+/// `example/web/certilia_callback.html`), which posts the callback URL on
+/// the `certilia_auth` BroadcastChannel and through a `storage` event. Both
+/// reach every same-origin document even when `Cross-Origin-Opener-Policy`
+/// has cut the popup off from its opener, which is why this does not use
+/// `window.opener` or `postMessage`.
 ///
-/// HTTP communication lives in [ProxyAuthService]; token persistence in
-/// [TokenStorageService]. This class owns popup window lifecycle and
-/// in-memory session state.
+/// The code only ever reaches the browser that logged in. A web flow that
+/// collected it anywhere else (for example by polling the proxy) would hand
+/// it to whoever started the login, including someone who sent the user a
+/// login link to collect their code.
+///
+/// HTTP requests go through the [CertiliaAuthBackend] and the saved token
+/// through [TokenStorageService]. This class opens and closes the popup and
+/// holds the current token in memory.
 class CertiliaWebClient {
   final CertiliaConfig config;
   final String serverUrl;
-  final ProxyAuthService _proxy;
+  final CertiliaAuthBackend _backend;
   final TokenStorageService _tokenStorage;
   final CertiliaLogger _logger;
 
   CertiliaToken? _currentToken;
 
-  /// Completes when the constructor's initial token load has finished.
-  /// Async-public methods await this so callers don't see "not authenticated"
-  /// before storage has been consulted.
+  /// Completes when the constructor has loaded the saved token. The public
+  /// async methods await it, so they do not report "not authenticated"
+  /// before storage has been read.
   late final Future<void> _ready;
 
-  static const Duration _pollingInterval = Duration(seconds: 2);
   static const Duration _popupCheckInterval = Duration(seconds: 1);
-  static const Duration _pollingTimeout = Duration(minutes: 5);
+  static const Duration _loginTimeout = Duration(minutes: 5);
   static const int _popupWidth = 500;
   static const int _popupHeight = 700;
+
+  /// BroadcastChannel name and localStorage key the callback page writes to.
+  static const String callbackChannel = 'certilia_auth';
+  static const String callbackStorageKey = 'certilia_auth_result';
 
   CertiliaWebClient({
     required this.config,
     required this.serverUrl,
-    ProxyAuthService? proxyService,
+    CertiliaAuthBackend? backend,
     TokenStorageService? tokenStorage,
   })  : _logger = CertiliaLogger(
           componentName: 'CertiliaWebClient',
           enableLogging: config.enableLogging,
         ),
-        _proxy = proxyService ??
-            ProxyAuthService(
+        _backend = backend ??
+            createAuthBackend(
+              config: config,
               serverUrl: serverUrl,
-              logger: CertiliaLogger(
-                componentName: 'CertiliaWebClient.proxy',
-                enableLogging: config.enableLogging,
-              ),
+              componentName: 'CertiliaWebClient',
             ),
         _tokenStorage = tokenStorage ?? TokenStorageService() {
-    config.validate();
+    config.validate(isWeb: true);
     _ready = _initializeTokens();
   }
 
@@ -69,36 +84,46 @@ class CertiliaWebClient {
     _currentToken = await _tokenStorage.loadToken();
     if (_currentToken != null) {
       _logger.log(_currentToken!.isExpired
-          ? 'Loaded saved token (expired — caller decides)'
+          ? 'Loaded saved token (expired; caller decides)'
           : 'Loaded saved authentication token');
     }
   }
 
-  /// Runs the full popup + polling OAuth flow. Persists the resulting
-  /// tokens, returns the resolved user.
+  /// Runs the login in a popup (see the class comment), saves the tokens and
+  /// returns the user.
   Future<CertiliaUser> authenticate(BuildContext context) async {
+    // Safari (and every browser on iOS) lets a page open a window only while
+    // it is still handling the user's tap; a network round trip ends that,
+    // and window.open then returns null. So the popup opens blank here,
+    // before the first await, and goes to Certilia once the proxy has
+    // returned the authorization URL. Callers must call authenticate()
+    // directly from the tap handler, without awaiting network I/O first.
+    // (Chrome and Firefox allow popups for a few seconds after a click,
+    // which is why opening after the proxy call works there.)
+    final web.Window popup;
+    try {
+      popup = _openPopup();
+    } catch (e) {
+      _logger.log('Authentication failed: $e');
+      rethrow;
+    }
     try {
       await _ready;
       _logger.log('Starting web authentication flow');
 
-      final authData = await _proxy.initialize();
-      final polling = await _proxy.startPollingSession(
-        state: authData['state'] as String,
-        sessionId: authData['session_id'] as String,
-      );
-
-      final code = await _openAuthPopupWithPolling(
+      final authData =
+          await _backend.initialize(redirectUri: config.callbackUrl);
+      final callback = await _openAuthPopupWithCallbackPage(
+        popup: popup,
         authorizationUrl: authData['authorization_url'] as String,
-        pollingId: polling['polling_id'] as String,
+        state: authData['state'] as String,
+      );
+      final code = codeFromCallback(
+        callback,
+        expectedState: authData['state'] as String,
       );
 
-      if (code == null) {
-        throw const CertiliaAuthenticationException(
-          message: 'Authentication was cancelled',
-        );
-      }
-
-      final tokenData = await _proxy.exchange(
+      final tokenData = await _backend.exchange(
         code: code,
         state: authData['state'] as String,
         sessionId: authData['session_id'] as String,
@@ -109,12 +134,16 @@ class CertiliaWebClient {
 
       final user = tokenData['user'] != null
           ? CertiliaUser.fromJson(tokenData['user'] as Map<String, dynamic>)
-          : await _proxy.fetchUserInfo(_currentToken!.accessToken);
+          : await _backend.fetchUserInfo(
+              _currentToken!.accessToken,
+              idToken: _currentToken!.idToken,
+            );
 
       _logger.log('Authentication successful for user: ${user.sub}');
       return user;
     } catch (e) {
       _logger.log('Authentication failed: $e');
+      _closePopup(popup);
       if (e is CertiliaException) rethrow;
       throw CertiliaAuthenticationException(
         message: 'Authentication failed',
@@ -123,116 +152,174 @@ class CertiliaWebClient {
     }
   }
 
-  Future<String?> _openAuthPopupWithPolling({
-    required String authorizationUrl,
-    required String pollingId,
-  }) async {
-    final completer = Completer<String?>();
-
+  /// Opens an empty, centred popup. Must run while the browser is still
+  /// handling the user's tap; see [authenticate].
+  web.Window _openPopup() {
     final left = (web.window.screen.width - _popupWidth) ~/ 2;
     final top = (web.window.screen.height - _popupHeight) ~/ 2;
-
-    _logger.log('Opening auth popup, polling id: $pollingId');
     final popup = web.window.open(
-      authorizationUrl,
+      '',
       'certilia_auth',
       'width=$_popupWidth,height=$_popupHeight,left=$left,top=$top',
     );
     if (popup == null) {
       throw const CertiliaAuthenticationException(
         message: 'Popup blocked. Allow popups for this site and try again.',
+        code: 'popup_blocked',
       );
     }
+    return popup;
+  }
 
-    Timer? pollTimer;
-    Timer? popupCheckTimer;
-    Timer? timeoutTimer;
-    var active = true;
-
-    void cleanup() {
-      active = false;
-      pollTimer?.cancel();
-      popupCheckTimer?.cancel();
-      timeoutTimer?.cancel();
+  /// Sends [popup] to [authorizationUrl]. Returns false when the user has
+  /// already closed it, which happens while the popup is still blank during
+  /// the proxy round trip. Until the popup leaves the app's origin,
+  /// `popup.closed` is reliable even under COOP, and afterwards
+  /// [_watchForUserClose] cannot tell this close from COOP cutting the
+  /// reference, so it has to be caught here.
+  bool _sendPopup(web.Window popup, String authorizationUrl) {
+    if (popup.closed) {
+      _logger.log('Popup closed before it was sent to Certilia');
+      return false;
     }
+    popup.location.href = authorizationUrl;
+    return true;
+  }
 
-    void closePopupSoon() {
-      Timer(const Duration(milliseconds: 100), () {
+  void _closePopup(web.Window popup) {
+    try {
+      popup.close();
+    } catch (_) {}
+  }
+
+  /// Calls [onUserClosed] when the user closes [popup].
+  ///
+  /// `popup.closed` alone cannot tell: when the app page sends
+  /// `Cross-Origin-Opener-Policy: same-origin`, the browser cuts the app off
+  /// from the popup as soon as it navigates to Certilia, and `closed` reads
+  /// true while the popup is still open. Without COOP, reading
+  /// `popup.location.href` throws while the popup shows Certilia's
+  /// (cross-origin) page. Only after seeing that do we know the reference
+  /// is intact, so only then does a later `closed` mean the user closed it.
+  /// Otherwise the flow relies on its result channel and timeout.
+  Timer _watchForUserClose(web.Window popup, void Function() onUserClosed) {
+    var sawCrossOrigin = false;
+    return Timer.periodic(_popupCheckInterval, (timer) {
+      if (!popup.closed) {
         try {
-          popup.close();
-        } catch (_) {}
-      });
-    }
-
-    timeoutTimer = Timer(_pollingTimeout, () {
-      if (completer.isCompleted) return;
-      _logger.log('Polling timeout reached');
-      cleanup();
-      completer.complete(null);
-      closePopupSoon();
+          popup.location.href;
+        } catch (_) {
+          sawCrossOrigin = true;
+        }
+        return;
+      }
+      timer.cancel();
+      if (sawCrossOrigin) {
+        onUserClosed();
+      } else {
+        _logger.log('popup.closed without seeing the popup on Certilia '
+            '(COOP cut the reference, or it closed before loading); '
+            'waiting for the result or the timeout');
+      }
     });
+  }
 
-    pollTimer = Timer.periodic(_pollingInterval, (_) async {
-      if (!active) return;
+  /// Sends [popup] to Certilia and waits for the callback page on the app's
+  /// origin to report the callback URL. Returns null on timeout or when the
+  /// user closes the popup.
+  Future<Uri?> _openAuthPopupWithCallbackPage({
+    required web.Window popup,
+    required String authorizationUrl,
+    required String state,
+  }) async {
+    final completer = Completer<Uri?>();
+    _logger.log('Sending popup to Certilia, callback page: ${config.callbackUrl}');
+    if (!_sendPopup(popup, authorizationUrl)) return null;
+    final expected = Uri.parse(config.callbackUrl!);
+
+    // Accept only a callback for this login: same callback page, our state,
+    // written in the last 10 minutes. Results of another tab's login are
+    // ignored. The accepted result is removed from localStorage.
+    void onPayload(String? payload, String via) {
+      if (payload == null || completer.isCompleted) return;
+      final Uri url;
       try {
-        final data = await _proxy.pollStatus(pollingId);
-        if (data == null) {
-          // Session expired or not found.
-          cleanup();
-          if (!completer.isCompleted) completer.complete(null);
+        final decoded = jsonDecode(payload) as Map<String, dynamic>;
+        final at = decoded['at'] as int?;
+        if (at != null &&
+            DateTime.now().millisecondsSinceEpoch - at > 10 * 60 * 1000) {
           return;
         }
-        final status = data['status'];
-        if (status == 'completed' && data['result'] != null) {
-          final code = (data['result'] as Map<String, dynamic>)['code'];
-          _logger.log('Auth completed via polling');
-          cleanup();
-          if (!completer.isCompleted) completer.complete(code as String?);
-          closePopupSoon();
-        } else if (status == 'error') {
-          _logger.log('Server reported auth error: ${data['error']}');
-          cleanup();
-          if (!completer.isCompleted) completer.complete(null);
-          closePopupSoon();
-        }
-      } catch (e) {
-        _logger.log('Polling error: $e');
+        url = Uri.parse(decoded['url'] as String);
+      } catch (_) {
+        return;
       }
+      // Compared part by part: Uri.origin throws for non-http(s) URLs, and
+      // anything on the channel can post one.
+      if (url.scheme != expected.scheme ||
+          url.host != expected.host ||
+          url.port != expected.port ||
+          url.path != expected.path) {
+        return;
+      }
+      if (url.queryParameters['state'] != state) return;
+      _logger.log('Callback page reported the result via $via');
+      try {
+        web.window.localStorage.removeItem(callbackStorageKey);
+      } catch (_) {}
+      completer.complete(url);
+    }
+
+    final channel = web.BroadcastChannel(callbackChannel);
+    channel.onmessage = ((web.MessageEvent e) {
+      onPayload((e.data as JSString?)?.toDart, 'BroadcastChannel');
+    }).toJS;
+
+    final storageListener = ((web.StorageEvent e) {
+      if (e.key == callbackStorageKey) onPayload(e.newValue, 'storage event');
+    }).toJS;
+    web.window.addEventListener('storage', storageListener);
+
+    // Mobile browsers suspend background tabs, and while the user approves
+    // the login in the Certilia app this tab is in the background. Events
+    // sent to it then can be lost, so also read the entry the callback page
+    // leaves in localStorage. Timers resume when the tab does.
+    final storageCheckTimer = Timer.periodic(_popupCheckInterval, (_) {
+      try {
+        onPayload(
+          web.window.localStorage.getItem(callbackStorageKey),
+          'localStorage check',
+        );
+      } catch (_) {}
     });
 
-    // COOP gotcha: pod `Cross-Origin-Opener-Policy: same-origin` (nužan za
-    // wasm crossOriginIsolated / skwasm threading) browser PRESIJECA
-    // opener→popup referencu za cross-origin popupe (Certilia/IDP) → `popup.closed`
-    // čita `true` odmah iako popup radi. Zato popup.closed koristimo kao signal
-    // otkazivanja SAMO ako smo popup prvo vidjeli otvoren; inače se oslanjamo
-    // isključivo na polling (+ timeout), koji je izvor istine jer hita proxy
-    // neovisno o COOP-u. Bez ovoga svaki cross-origin popup login lažno otkaže
-    // nakon ~4s (radi lokalno gdje COOP nije postavljen, puca u produkciji).
-    var sawPopupOpen = false;
-    popupCheckTimer = Timer.periodic(_popupCheckInterval, (timer) {
-      if (!popup.closed) {
-        sawPopupOpen = true;
-        return;
-      }
-      if (!sawPopupOpen) {
-        _logger.log('popup.closed=true bez viđenog otvaranja — COOP-severed '
-            'referenca; oslanjam se na polling');
-        timer.cancel();
-        return;
-      }
-      // Popup je stvarno bio otvoren pa zatvoren → korisnik je odustao.
-      timer.cancel();
-      // Give polling one more window — server callback may still be in flight.
-      Timer(const Duration(seconds: 3), () {
-        if (!completer.isCompleted && active) {
-          _logger.log('Popup closed without polling result');
-          cleanup();
+    final popupCheckTimer = _watchForUserClose(popup, () {
+      // The callback page closes the popup itself right after posting, so
+      // give the message a moment to arrive before calling it a cancel.
+      Timer(const Duration(seconds: 2), () {
+        if (!completer.isCompleted) {
+          _logger.log('Popup closed without a callback');
           completer.complete(null);
         }
       });
     });
+    final timeoutTimer = Timer(_loginTimeout, () {
+      if (!completer.isCompleted) {
+        _logger.log('Timed out waiting for the callback page');
+        completer.complete(null);
+      }
+    });
 
-    return completer.future;
+    try {
+      return await completer.future;
+    } finally {
+      popupCheckTimer.cancel();
+      storageCheckTimer.cancel();
+      timeoutTimer.cancel();
+      channel.close();
+      web.window.removeEventListener('storage', storageListener);
+      _closePopup(popup);
+    }
   }
 
   bool get isAuthenticated =>
@@ -253,7 +340,10 @@ class CertiliaWebClient {
         await refreshToken();
       }
 
-      return await _proxy.fetchUserInfo(_currentToken!.accessToken);
+      return await _backend.fetchUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     } catch (e) {
       _logger.log('Failed to get current user: $e');
       return null;
@@ -268,20 +358,23 @@ class CertiliaWebClient {
     }
     try {
       _logger.log('Refreshing token');
-      final tokenData = await _proxy.refresh(
+      final tokenData = await _backend.refresh(
         accessToken: _currentToken!.accessToken,
         refreshToken: _currentToken!.refreshToken!,
+        idToken: _currentToken!.idToken,
       );
       _currentToken = _tokenFromResponse(
         tokenData,
         fallbackRefreshToken: _currentToken!.refreshToken,
+        fallbackIdToken: _currentToken!.idToken,
       );
       await _tokenStorage.saveToken(_currentToken!);
       _logger.log('Token refreshed successfully');
     } catch (e) {
       _logger.log('Token refresh failed: $e');
       if (e is CertiliaException) rethrow;
-      throw CertiliaAuthenticationException(
+      // Not a refusal (see refreshWasRefused): the session stays.
+      throw CertiliaException(
         message: 'Failed to refresh token',
         details: e.toString(),
       );
@@ -295,8 +388,9 @@ class CertiliaWebClient {
     await _tokenStorage.deleteToken();
   }
 
-  /// Returns extended user info. Auto-refreshes once on 401, auto-logs-out
-  /// if refresh fails.
+  /// Returns extended user info. Refreshes once on 401/502 and logs out
+  /// when the refresh is refused (see `refreshWasRefused`); other refresh
+  /// failures are rethrown and keep the session.
   Future<CertiliaExtendedInfo?> getExtendedUserInfo() async {
     await _ready;
     if (_currentToken == null || _currentToken!.isExpired) {
@@ -304,22 +398,29 @@ class CertiliaWebClient {
       return null;
     }
 
-    final info = await _proxy.fetchExtendedInfo(_currentToken!.accessToken);
+    final info = await _backend.fetchExtendedInfo(
+      _currentToken!.accessToken,
+      idToken: _currentToken!.idToken,
+    );
     if (info != null) return info;
 
-    // 401/502 — try to refresh once.
+    // The backend returned null for a 401/502: refresh once and retry.
     if (_currentToken!.refreshToken == null) {
       await logout();
       return null;
     }
     try {
       await refreshToken();
-      return await _proxy.fetchExtendedInfo(_currentToken!.accessToken);
     } catch (e) {
-      _logger.log('Refresh failed, clearing authentication: $e');
+      if (!refreshWasRefused(e)) rethrow;
+      _logger.log('Refresh refused, clearing authentication: $e');
       await logout();
       return null;
     }
+    return await _backend.fetchExtendedInfo(
+      _currentToken!.accessToken,
+      idToken: _currentToken!.idToken,
+    );
   }
 
   String? get currentAccessToken => _currentToken?.accessToken;
@@ -327,18 +428,19 @@ class CertiliaWebClient {
   String? get currentIdToken => _currentToken?.idToken;
   DateTime? get tokenExpiry => _currentToken?.expiresAt;
 
-  void dispose() => _proxy.close();
+  void dispose() => _backend.close();
 
   CertiliaToken _tokenFromResponse(
     Map<String, dynamic> data, {
     String? fallbackRefreshToken,
+    String? fallbackIdToken,
   }) {
     final expiresIn = data['expiresIn'];
     return CertiliaToken(
       accessToken: data['accessToken'] as String,
       refreshToken:
           (data['refreshToken'] as String?) ?? fallbackRefreshToken,
-      idToken: data['idToken'] as String?,
+      idToken: (data['idToken'] as String?) ?? fallbackIdToken,
       expiresAt: expiresIn != null
           ? DateTime.now().add(Duration(seconds: expiresIn as int))
           : null,
@@ -347,5 +449,6 @@ class CertiliaWebClient {
   }
 }
 
-/// Alias for platform client
+/// The client type on web; `certilia_webview_client.dart` defines the same
+/// name for mobile and desktop.
 typedef CertiliaPlatformClient = CertiliaWebClient;

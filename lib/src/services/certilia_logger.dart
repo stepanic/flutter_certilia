@@ -1,8 +1,9 @@
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 
-/// Centralized logging service for Certilia SDK
-/// Eliminates duplicate logging logic from individual clients
+/// Logger used by every SDK class. It writes to `dart:developer` and, in
+/// debug builds, to the console, and only when [enableLogging] is on;
+/// [error] also writes in debug builds with logging off.
 class CertiliaLogger {
   /// Whether logging is enabled
   final bool enableLogging;
@@ -73,7 +74,7 @@ class CertiliaLogger {
     }
   }
 
-  /// Logs a debug message (only in debug mode)
+  /// Logs a debug message, only in debug builds with logging on.
   void debug(String message) {
     if (enableLogging && kDebugMode) {
       developer.log(

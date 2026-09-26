@@ -141,8 +141,12 @@ void main() {
       });
 
       expect(user1, equals(user2));
-      // Note: hashCode might differ due to Map implementation details
-      // expect(user1.hashCode, equals(user2.hashCode));
+      expect(user1.hashCode, equals(user2.hashCode));
+      // Same claims in another order: still equal, same hash.
+      final reordered = CertiliaUser.fromJson(
+          Map.fromEntries(testJson.entries.toList().reversed));
+      expect(reordered, equals(user1));
+      expect(reordered.hashCode, equals(user1.hashCode));
       expect(user1, isNot(equals(user3)));
     });
 

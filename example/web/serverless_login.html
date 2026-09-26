@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<!--
+  Certilia login without any server, in plain JavaScript: the same steps as
+  the SDK's direct mode (CertiliaDirectClient), useful to check a Certilia
+  client before wiring up an app.
+
+  - PKCE authorization code flow in a popup; Certilia redirects to
+    certilia_callback.html next to this page, which hands the result back
+    over BroadcastChannel / localStorage.
+  - The code is exchanged at idp.certilia.com from the browser (its token
+    endpoint allows cross-origin requests) with the client secret.
+  - The ID token's RS256 signature is verified against Certilia's JWKS with
+    WebCrypto, plus iss, aud, exp and nonce.
+
+  Register <this directory>/certilia_callback.html as the client's callback.
+  The client id and secret are not in this file: before clicking, run in the
+  DevTools console
+    sessionStorage.setItem('certilia_test_client',
+      JSON.stringify({client_id: '...', client_secret: '...'}))
+  Anyone who can run this page with the secret can log in as your client;
+  see the README section on direct mode.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serverless Certilia login test</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 40rem; padding: 0 1rem; }
+  button { font-size: 1.1rem; padding: .6rem 1.2rem; }
+  pre { background: #f3f4f6; padding: 1rem; white-space: pre-wrap; word-break: break-word; }
+</style>
+<h1>Serverless Certilia login</h1>
+<p><button id="login">Log in with Certilia</button></p>
+<pre id="out">idle</pre>
+<script>
+const IDP = 'https://idp.certilia.com';
+const CALLBACK = new URL('certilia_callback.html', location.href).href;
+const out = document.getElementById('out');
+const log = (m) => { out.textContent += '\n' + m; };
+window.__result = null;
+
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64urlDecode = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')
+  .padEnd(Math.ceil(s.length / 4) * 4, '=')), c => c.charCodeAt(0));
+const random = (n) => b64url(crypto.getRandomValues(new Uint8Array(n)));
+
+function waitForCallback(state) {
+  return new Promise((resolve) => {
+    const accept = (payload) => {
+      try {
+        const url = new URL(JSON.parse(payload).url);
+        if (url.searchParams.get('state') !== state) return;
+        localStorage.removeItem('certilia_auth_result');
+        resolve(url);
+      } catch (e) {}
+    };
+    const ch = new BroadcastChannel('certilia_auth');
+    ch.onmessage = (e) => accept(e.data);
+    addEventListener('storage', (e) => { if (e.key === 'certilia_auth_result') accept(e.newValue); });
+    setInterval(() => accept(localStorage.getItem('certilia_auth_result')), 1000);
+  });
+}
+
+async function verifyIdToken(idToken, clientId, nonce) {
+  const [h, p, s] = idToken.split('.');
+  const header = JSON.parse(new TextDecoder().decode(b64urlDecode(h)));
+  const claims = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
+  const jwks = await (await fetch(IDP + '/oauth2/jwks')).json();
+  const jwk = jwks.keys.find(k => k.kid === header.kid);
+  if (!jwk) throw new Error('no JWKS key for kid ' + header.kid);
+  const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: 'RS256', ext: true },
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+  const sigOk = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64urlDecode(s),
+    new TextEncoder().encode(h + '.' + p));
+  const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  return {
+    alg: header.alg, signatureValid: sigOk,
+    issOk: claims.iss === IDP + '/oauth2/token', audOk: aud.includes(clientId),
+    notExpired: claims.exp * 1000 > Date.now(), nonceOk: claims.nonce === nonce,
+    hasPin: 'pin' in claims, claimNames: Object.keys(claims).sort(),
+    displayName: [claims.given_name, claims.family_name].filter(Boolean).join(' '),
+  };
+}
+
+document.getElementById('login').onclick = async () => {
+  out.textContent = 'starting';
+  const popup = window.open('', 'certilia_auth', 'width=500,height=700');  // before any await (Safari)
+  try {
+    const client = JSON.parse(sessionStorage.getItem('certilia_test_client') || 'null');
+    if (!client) throw new Error('no client in sessionStorage');
+    const verifier = random(32), state = random(16), nonce = random(16);
+    const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+    const q = new URLSearchParams({
+      client_id: client.client_id, redirect_uri: CALLBACK, response_type: 'code',
+      scope: 'openid profile eid email offline_access', state, nonce,
+      code_challenge: challenge, code_challenge_method: 'S256', prompt: 'login',
+      claims: JSON.stringify({ id_token: { pin: { essential: true } } }),
+    });
+    popup.location.href = IDP + '/oauth2/authorize?' + q;
+    log('popup sent to Certilia; waiting for the callback page');
+
+    const cb = await waitForCallback(state);
+    if (cb.searchParams.get('error')) throw new Error('authorize error: ' + cb.searchParams.get('error'));
+    log('got code in the browser');
+
+    const tokenRes = await fetch(IDP + '/oauth2/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code', code: cb.searchParams.get('code'), redirect_uri: CALLBACK,
+        code_verifier: verifier, client_id: client.client_id, client_secret: client.client_secret,
+      }),
+    });
+    const tokens = await tokenRes.json();
+    log('token endpoint (called from the browser): HTTP ' + tokenRes.status +
+        '; fields: ' + Object.keys(tokens).sort().join(','));
+    if (!tokens.id_token) throw new Error('no id_token: ' + JSON.stringify(tokens));
+
+    const v = await verifyIdToken(tokens.id_token, client.client_id, nonce);
+    log('id_token: ' + JSON.stringify({ ...v, displayName: undefined, claimNames: undefined }));
+    log('claims: ' + v.claimNames.join(','));
+    log('signed in as: ' + v.displayName);
+
+    let refresh = null;
+    if (tokens.refresh_token) {
+      const r = await fetch(IDP + '/oauth2/token', {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token,
+          client_id: client.client_id, client_secret: client.client_secret }),
+      });
+      const rj = await r.json();
+      refresh = { status: r.status, fields: Object.keys(rj).sort() };
+      log('refresh from the browser: HTTP ' + r.status + '; fields: ' + refresh.fields.join(','));
+    }
+    window.__result = { ok: true, tokenStatus: tokenRes.status, tokenFields: Object.keys(tokens).sort(),
+      verify: { ...v, displayName: undefined }, refresh };
+  } catch (e) {
+    log('FAILED: ' + e.message);
+    window.__result = { ok: false, error: String(e.message) };
+    try { popup && popup.close(); } catch (_) {}
+  }
+};
+</script>

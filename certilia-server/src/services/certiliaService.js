@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/index.js';
+import { resolveClientByRedirectUri } from '../config/clients.js';
 import logger from '../utils/logger.js';
 import { ExternalServiceError } from '../utils/errors.js';
 
@@ -71,6 +72,7 @@ class CertiliaService {
    * @param {string} params.nonce - Nonce parameter
    * @param {string} params.codeChallenge - PKCE code challenge
    * @param {string} params.redirectUri - Redirect URI
+   * @param {Object} [params.client] - Certilia client; defaults to the one registered for redirectUri
    * @returns {string} Authorization URL
    */
   buildAuthorizationUrl({
@@ -78,9 +80,10 @@ class CertiliaService {
     nonce,
     codeChallenge,
     redirectUri = config.certilia.redirectUri,
+    client = resolveClientByRedirectUri(config.certilia.clients, redirectUri),
   }) {
     const params = new URLSearchParams({
-      client_id: config.certilia.clientId,
+      client_id: client.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: config.certilia.scopes.join(' '),
@@ -89,11 +92,12 @@ class CertiliaService {
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
       prompt: 'login',
-      // Eksplicitno zatraži OIB (`pin`) U ID TOKENU. eid scope ga inače vraća
-      // samo preko userinfo endpointa, koji u Certilia produkciji traži token
-      // binding (ne radi) — pa OIB nikad ne stigne do bridgea koji čita
-      // claimove iz verificiranog id_tokena. claims_parameter_supported=true,
-      // `pin` je u claims_supported.
+      // Traži OIB (`pin`) u ID tokenu. Scope eid ga inače daje samo preko
+      // userinfo endpointa, a taj u Certilijinoj produkciji odbija pozive sa
+      // servera (access token je vezan za `atbv` cookie u korisnikovom
+      // browseru). Discovery dokument navodi claims_parameter_supported=true i
+      // `pin` u claims_supported. Portal klijenti ipak ne dobiju `pin`:
+      // Certilia im šalje OIB kao `sub`.
       claims: JSON.stringify({ id_token: { pin: { essential: true } } }),
     });
 
@@ -114,14 +118,20 @@ class CertiliaService {
    * @param {string} params.code - Authorization code
    * @param {string} params.codeVerifier - PKCE code verifier
    * @param {string} params.redirectUri - Redirect URI
+   * @param {Object} [params.client] - Certilia client; defaults to the one registered for redirectUri
    * @returns {Promise<Object>} Token response
    */
-  async exchangeCodeForTokens({ code, codeVerifier, redirectUri = config.certilia.redirectUri }) {
+  async exchangeCodeForTokens({
+    code,
+    codeVerifier,
+    redirectUri = config.certilia.redirectUri,
+    client = resolveClientByRedirectUri(config.certilia.clients, redirectUri),
+  }) {
     try {
       const params = new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: config.certilia.clientId,
-        client_secret: config.certilia.clientSecret,
+        client_id: client.clientId,
+        client_secret: client.clientSecret,
         code,
         redirect_uri: redirectUri,
         code_verifier: codeVerifier,
@@ -155,17 +165,20 @@ class CertiliaService {
   /**
    * Refresh access token
    * @param {string} refreshToken - Refresh token
+   * @param {Object} client - Certilia client that issued the token (see
+   *   resolveClientById); a token can only be refreshed by its own client
    * @returns {Promise<Object>} Token response
    */
-  async refreshAccessToken(refreshToken) {
+  async refreshAccessToken(refreshToken, client) {
+    // Outside the try: a missing client is a programming error, not a
+    // Certilia failure.
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: client.clientId,
+      client_secret: client.clientSecret,
+      refresh_token: refreshToken,
+    });
     try {
-      const params = new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: config.certilia.clientId,
-        client_secret: config.certilia.clientSecret,
-        refresh_token: refreshToken,
-      });
-
       const response = await this.client.post(
         config.certilia.tokenEndpoint,
         params.toString(),
@@ -194,12 +207,15 @@ class CertiliaService {
   /**
    * Get user information
    * @param {string} accessToken - Access token
-   * @param {string} idToken - ID token (optional, may be required for token binding)
+   * @param {string} idToken - ID token (optional); when given, two more request
+   *   forms are tried
    * @returns {Promise<Object>} User information
    */
   async getUserInfo(accessToken, idToken = null) {
     try {
-      // Try multiple methods to satisfy token binding requirements
+      // Three request forms for the userinfo endpoint. In production none of
+      // them succeeds: Certilia binds the access token to the `atbv` cookie it
+      // set in the user's browser, and this server does not have that cookie.
       let response;
       let lastError;
 
@@ -223,7 +239,7 @@ class CertiliaService {
 
       // If we have id_token, try additional methods
       if (idToken) {
-        // Method 2: POST with access_token in body (simpler approach)
+        // Method 2: POST with access_token in body
         try {
           logger.info('Trying POST with access_token in body');
           const params = new URLSearchParams({
@@ -277,7 +293,8 @@ class CertiliaService {
           logger.warn('UserInfo endpoint requires token binding which is not supported in production');
           logger.info('Falling back to ID token claims');
 
-          // Return a special error that signals to use ID token
+          // Callers recognize this message and read the claims from the ID
+          // token instead.
           const fallbackError = new Error('USE_ID_TOKEN_FALLBACK');
           fallbackError.originalError = lastError;
           throw fallbackError;
@@ -311,18 +328,21 @@ class CertiliaService {
   /**
    * Revoke token
    * @param {string} token - Token to revoke
+   * @param {Object} client - Certilia client that issued the token (see
+   *   resolveClientById)
    * @param {string} tokenType - Type of token (access_token or refresh_token)
    * @returns {Promise<void>}
    */
-  async revokeToken(token, tokenType = 'access_token') {
+  async revokeToken(token, client, tokenType = 'access_token') {
+    // Outside the try, which swallows Certilia's errors: a missing client
+    // must not be swallowed with them.
+    const params = new URLSearchParams({
+      token,
+      token_type_hint: tokenType,
+      client_id: client.clientId,
+      client_secret: client.clientSecret,
+    });
     try {
-      const params = new URLSearchParams({
-        token,
-        token_type_hint: tokenType,
-        client_id: config.certilia.clientId,
-        client_secret: config.certilia.clientSecret,
-      });
-
       await this.client.post(
         '/oauth2/revoke',
         params.toString(),
@@ -333,7 +353,7 @@ class CertiliaService {
         }
       );
     } catch (error) {
-      // Token revocation failures are often not critical
+      // A failed revocation is logged, not thrown: the token expires anyway.
       logger.warn('Failed to revoke token', {
         tokenType,
         error: error.message,

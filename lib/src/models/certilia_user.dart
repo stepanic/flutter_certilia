@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../utils/oib.dart';
+
 /// Represents a Certilia user with their identity information
 @immutable
 class CertiliaUser {
@@ -12,7 +14,9 @@ class CertiliaUser {
   /// User's last name
   final String? lastName;
 
-  /// User's OIB (Croatian tax number)
+  /// User's OIB (Croatian personal identification number): the `oib` or
+  /// `pin` claim, or `sub` when it is a valid OIB (Certilia sends the OIB
+  /// as the subject).
   final String? oib;
 
   /// User's date of birth
@@ -21,7 +25,8 @@ class CertiliaUser {
   /// User's email address (if available)
   final String? email;
 
-  /// Raw JSON response from the server
+  /// The JSON this user was built from: the proxy's user object, or the ID
+  /// token claims in direct mode.
   final Map<String, dynamic> raw;
 
   /// Creates a new [CertiliaUser]
@@ -48,7 +53,7 @@ class CertiliaUser {
                json['last_name'] as String? ??
                json['familyName'] as String? ??
                json['lastName'] as String?,
-      oib: json['oib'] as String? ?? json['pin'] as String?,
+      oib: oibFromClaims(json),
       dateOfBirth: _parseDate(
         json['birthdate'] as String? ??
         json['date_of_birth'] as String? ??
@@ -144,7 +149,10 @@ class CertiliaUser {
       oib.hashCode ^
       dateOfBirth.hashCode ^
       email.hashCode ^
-      raw.hashCode;
+      // Same comparison as mapEquals in ==: keys and values by ==, any order.
+      // raw.hashCode would be the Map's identity.
+      Object.hashAllUnordered(
+          raw.entries.map((e) => Object.hash(e.key, e.value)));
 
   @override
   String toString() {

@@ -3,22 +3,27 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'certilia_browser_client.dart';
+import 'certilia_native_client.dart';
 import 'certilia_webview_client.dart';
 import 'exceptions/certilia_exception.dart';
 import 'models/certilia_config.dart';
 import 'models/certilia_extended_info.dart';
 import 'models/certilia_token.dart';
 import 'models/certilia_user.dart';
+import 'refresh_errors.dart';
 import 'services/certilia_logger.dart';
 import 'services/token_storage_service.dart';
 
-/// Stateful wrapper around the stateless [CertiliaWebViewClient].
+/// Stateful wrapper around a stateless [CertiliaNativeClient]:
+/// [CertiliaBrowserClient] when [CertiliaConfig.callbackUrl] is set,
+/// otherwise [CertiliaWebViewClient].
 ///
-/// Manages token + user persistence, refresh-on-expiry, and cached user
-/// state. Used on mobile/desktop targets; the web target's
-/// `CertiliaWebClient` is already stateful by necessity (popup polling).
+/// Stores the token and the user in secure storage, refreshes an expired
+/// token, and keeps the current user in memory. Used on mobile and desktop;
+/// on web, `CertiliaWebClient` keeps this state itself.
 class CertiliaStatefulWrapper {
-  final CertiliaWebViewClient _client;
+  final CertiliaNativeClient _client;
   final TokenStorageService _tokenStorage;
   final FlutterSecureStorage _userStorage;
   final CertiliaLogger _logger;
@@ -26,9 +31,9 @@ class CertiliaStatefulWrapper {
   CertiliaToken? _currentToken;
   CertiliaUser? _currentUser;
 
-  /// Completes when the constructor's initial token + user load has finished.
-  /// Async-public methods await this so callers don't see a fresh-instance
-  /// "not authenticated" before storage has been consulted.
+  /// Completes when the constructor has loaded the saved token and user.
+  /// The public async methods await it, so a new instance does not report
+  /// "not authenticated" before storage has been read.
   late final Future<void> _ready;
 
   static const String _userStorageKey = 'certilia_user';
@@ -39,12 +44,11 @@ class CertiliaStatefulWrapper {
     required String serverUrl,
     FlutterSecureStorage? storage,
     TokenStorageService? tokenStorage,
-    CertiliaWebViewClient? client,
+    CertiliaNativeClient? client,
   })  : _client = client ??
-            CertiliaWebViewClient(
-              config: config,
-              serverUrl: serverUrl,
-            ),
+            (config.callbackUrl != null
+                ? CertiliaBrowserClient(config: config, serverUrl: serverUrl)
+                : CertiliaWebViewClient(config: config, serverUrl: serverUrl)),
         _tokenStorage =
             tokenStorage ?? TokenStorageService(storage: storage),
         _userStorage = storage ?? const FlutterSecureStorage(),
@@ -69,7 +73,7 @@ class CertiliaStatefulWrapper {
     }
     _logger.log('Starting authentication...');
     final authData = await _client.authenticate(context);
-    _logger.log('Auth data received from WebView');
+    _logger.log('Auth data received');
 
     _currentToken = _tokenFromResponse(authData);
     await _tokenStorage.saveToken(_currentToken!);
@@ -78,7 +82,10 @@ class CertiliaStatefulWrapper {
       _currentUser =
           CertiliaUser.fromJson(authData['user'] as Map<String, dynamic>);
     } else {
-      _currentUser = await _client.getUserInfo(_currentToken!.accessToken);
+      _currentUser = await _client.getUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     }
     if (_currentUser != null) {
       await _saveUser(_currentUser!);
@@ -101,12 +108,26 @@ class CertiliaStatefulWrapper {
 
     if (_currentToken!.isExpired) {
       if (_currentToken!.refreshToken == null) return null;
-      await refreshToken();
+      try {
+        await refreshToken();
+      } on CertiliaException catch (e) {
+        // Certilia currently refuses refresh for portal clients, so in direct
+        // mode every session ends here when the access token expires. End it
+        // cleanly instead of throwing at the caller. A timeout or outage
+        // keeps the session, so a later call can still refresh it.
+        if (!refreshWasRefused(e)) rethrow;
+        _logger.log('Refresh refused, logging out: $e');
+        await logout();
+        return null;
+      }
     }
 
     if (_currentUser != null) return _currentUser;
 
-    _currentUser = await _client.getUserInfo(_currentToken!.accessToken);
+    _currentUser = await _client.getUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     if (_currentUser != null) {
       await _saveUser(_currentUser!);
     }
@@ -123,10 +144,12 @@ class CertiliaStatefulWrapper {
     final tokenData = await _client.refreshToken(
       accessToken: _currentToken!.accessToken,
       refreshToken: _currentToken!.refreshToken!,
+      idToken: _currentToken!.idToken,
     );
     _currentToken = _tokenFromResponse(
       tokenData,
       fallbackRefreshToken: _currentToken!.refreshToken,
+      fallbackIdToken: _currentToken!.idToken,
     );
     await _tokenStorage.saveToken(_currentToken!);
     _logger.log('Token saved to secure storage');
@@ -137,7 +160,10 @@ class CertiliaStatefulWrapper {
     if (_currentToken == null || _currentToken!.isExpired) return null;
 
     try {
-      return await _client.getExtendedUserInfo(_currentToken!.accessToken);
+      return await _client.getExtendedUserInfo(
+        _currentToken!.accessToken,
+        idToken: _currentToken!.idToken,
+      );
     } catch (e) {
       // Refresh once on 401/expired errors, then retry.
       final msg = e.toString();
@@ -145,12 +171,15 @@ class CertiliaStatefulWrapper {
         if (_currentToken!.refreshToken != null) {
           try {
             await refreshToken();
-            return await _client
-                .getExtendedUserInfo(_currentToken!.accessToken);
-          } catch (_) {
+          } catch (e) {
+            if (!refreshWasRefused(e)) rethrow;
             await logout();
             return null;
           }
+          return await _client.getExtendedUserInfo(
+            _currentToken!.accessToken,
+            idToken: _currentToken!.idToken,
+          );
         }
       }
       rethrow;
@@ -172,7 +201,8 @@ class CertiliaStatefulWrapper {
         value: jsonEncode(user.toJson()),
       );
     } catch (_) {
-      // Silent — best-effort cache.
+      // The saved user is only a cache: without it, the next start fetches
+      // the user again.
     }
   }
 
@@ -198,13 +228,14 @@ class CertiliaStatefulWrapper {
   CertiliaToken _tokenFromResponse(
     Map<String, dynamic> data, {
     String? fallbackRefreshToken,
+    String? fallbackIdToken,
   }) {
     final expiresIn = data['expiresIn'];
     return CertiliaToken(
       accessToken: data['accessToken'] as String,
       refreshToken:
           (data['refreshToken'] as String?) ?? fallbackRefreshToken,
-      idToken: data['idToken'] as String?,
+      idToken: (data['idToken'] as String?) ?? fallbackIdToken,
       expiresAt: expiresIn != null
           ? DateTime.now().add(Duration(seconds: expiresIn as int))
           : null,
@@ -212,7 +243,7 @@ class CertiliaStatefulWrapper {
     );
   }
 
-  // ===== Static helpers for reading stored tokens without an instance =====
+  // Static helpers that read the saved token and user without an instance.
 
   static final TokenStorageService _staticTokenStorage =
       TokenStorageService();

@@ -1,8 +1,10 @@
-# Integration: dropping `flutter_certilia` into another app
+# Adding `flutter_certilia` to another app
 
-Five steps from a fresh Flutter project to a working "Login with
-Certilia" button. Assumes you already have a running `certilia-server`
-(see [`certilia-server/README.md`](certilia-server/README.md)).
+Five steps from a new Flutter project to a working "Login with
+Certilia" button in proxy mode. They assume a running `certilia-server`
+(see [`certilia-server/README.md`](certilia-server/README.md)). For
+direct mode, which needs no server, see the
+[README](README.md#direct-mode-no-server).
 
 ```mermaid
 flowchart TD
@@ -24,7 +26,7 @@ dependencies:
       ref: main
 ```
 
-For local-loop development, `path:` works too:
+For local development, `path:` works too:
 
 ```yaml
 dependencies:
@@ -36,8 +38,8 @@ Requirements: Dart `>=3.2.0`, Flutter `>=3.16.0`.
 
 ## 2. Configure the proxy URL
 
-The SDK only needs to know where your `certilia-server` lives.
-Don't bake that URL into your source — read it from `--dart-define`:
+The SDK only needs the URL of your `certilia-server`. Read it from
+`--dart-define` instead of writing it into the source:
 
 ```dart
 const _serverUrl = String.fromEnvironment(
@@ -80,9 +82,8 @@ class _LoginScreenState extends State<LoginScreen> {
       scopes: const ['openid', 'profile', 'eid', 'email', 'offline_access'],
       enableLogging: true,
     );
-    if (await _certilia.checkAuthenticationStatus()) {
-      setState(() async => _user = await _certilia.getCurrentUser());
-    }
+    final user = await _certilia.getCurrentUser();
+    if (mounted) setState(() => _user = user);
   }
 
   Future<void> _login() async {
@@ -90,9 +91,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = await _certilia.authenticate(context);
       setState(() => _user = user);
     } on CertiliaAuthenticationException {
-      // user cancelled or upstream rejected
+      // The user cancelled, or Certilia or the proxy refused the login
     } on CertiliaNetworkException catch (e) {
-      // HTTP error reaching the proxy — show e.statusCode / e.message
+      // HTTP error reaching the proxy: show e.statusCode / e.message
     }
   }
 
@@ -131,38 +132,36 @@ class _LoginScreenState extends State<LoginScreen> {
 void main() => runApp(const MaterialApp(home: LoginScreen()));
 ```
 
-That's the minimum. On web the SDK opens a popup against your proxy; on
-mobile/desktop it pushes a full-screen `WebView` route. Both close
-themselves on success and return control to your screen.
+Without a `callbackUrl`, the SDK opens a popup on web and pushes a
+full-screen `WebView` route on mobile and desktop. Both close when the
+login finishes, and `authenticate` returns the user.
 
 ## 5. (Optional) Use the example UI as a starting point
 
-The `example/lib/certilia_auth/` directory in this repo contains a
-fuller reference UI: themed login button with the official Certilia
-artwork, post-auth dashboard with user-info cards, language toggle, and
-the "what extended fields are available?" introspection card. Copy
-what you need, drop the rest.
+`example/lib/certilia_auth/` in this repo has a larger UI: a login
+button with Certilia's artwork, a logged-in view with user info cards,
+a language toggle, and a card that lists every extended field Certilia
+returned. Copy the parts you need.
 
-It does **not** ship in the SDK package — it's intentionally outside
-`lib/` so it doesn't constrain your design system.
+It is outside `lib/`, so it is not part of the package and does not
+impose a design on your app.
 
 ## Troubleshooting checklist
 
-- **Login button does nothing** → check the proxy URL is reachable
-  from the browser/device (open it manually).
-- **CORS errors on web** → your proxy's CORS allow-list needs your
-  app's origin. The SDK already avoids custom request headers on web
-  to keep CORS minimal.
-- **"Authentication was cancelled"** → user closed the popup/WebView,
-  or popup was blocked. On web, ensure popups are allowed for your
-  origin.
-- **Logged in but `getCurrentUser` returns null right after restart**
-  → this was a real race fixed in 0.2.0. If you see it on 0.2.0+
-  open an issue.
-- **`refreshToken` fails with 400** → server may need to be updated
-  for the 0.2.0 body-shape refresh contract. The 0.2.0+ server
-  accepts both old (header) and new (body) shapes; older versions
-  expect only the header form.
+- **The login button does nothing**: check that the proxy URL opens
+  in the browser or on the device.
+- **CORS errors on web**: add your app's origin to the proxy's
+  `ALLOWED_ORIGINS`. The SDK sends no custom headers from web, so the
+  origin is the only thing the proxy has to allow.
+- **"Popup blocked"**: the browser refused the popup. Call
+  `authenticate()` directly in the tap handler, and allow popups for
+  your origin.
+- **"Authentication was cancelled"**: the user closed the popup or
+  WebView before finishing.
+- **`refreshToken` fails with 400**: the proxy is older than 0.2.0 and
+  reads the refresh token only from the `Authorization` header, while
+  the SDK sends both tokens in the JSON body. Update `certilia-server`;
+  since 0.2.0 it accepts both.
 
-See [`README.md`](README.md) for the full public-API surface and
-[`CLAUDE.md`](CLAUDE.md) for SDK-internal architecture.
+See [`README.md`](README.md) for the public API and
+[`CLAUDE.md`](CLAUDE.md) for the SDK's internal architecture.

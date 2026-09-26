@@ -8,11 +8,11 @@ import 'widgets/authenticated_view.dart';
 import 'models/auth_state.dart';
 import 'theme/certilia_theme.dart';
 
-/// Standalone Certilia Authentication Widget
+/// Certilia login screen and signed-in view in one widget.
 ///
-/// This is a completely self-contained authentication feature that handles
-/// all authentication state internally. It requires no external navigation
-/// and works as a drop-in component.
+/// It keeps the authentication state itself and switches between the login
+/// view and the signed-in view without navigation, so an app can use it as
+/// its home screen.
 ///
 /// Usage:
 /// ```dart
@@ -23,6 +23,13 @@ import 'theme/certilia_theme.dart';
 /// ```
 class CertiliaAuthWidget extends StatefulWidget {
   final String serverUrl;
+
+  /// See `CertiliaConfig.callbackUrl`. Required on web; null on mobile keeps
+  /// the in-app WebView flow.
+  final String? callbackUrl;
+
+  /// Certilia client used without the proxy; see `CertiliaDirectClient`.
+  final CertiliaDirectClient? direct;
   final List<String> scopes;
   final VoidCallback? onThemeToggle;
   final bool enableLogging;
@@ -30,6 +37,8 @@ class CertiliaAuthWidget extends StatefulWidget {
   const CertiliaAuthWidget({
     super.key,
     required this.serverUrl,
+    this.callbackUrl,
+    this.direct,
     this.scopes = const ['openid', 'profile', 'eid', 'email', 'offline_access'],
     this.onThemeToggle,
     this.enableLogging = false,
@@ -50,10 +59,28 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
   bool _isEnglish = false;
   bool _isLoadingExtendedInfo = false;
 
+  /// SDK client, created once so the login button can call authenticate()
+  /// synchronously. On web the SDK must open its popup while the browser is
+  /// still handling the tap; Safari blocks window.open after an await.
+  dynamic _certilia;
+
   @override
   void initState() {
     super.initState();
     debugPrint('🏁 [CertiliaAuthWidget] initState called');
+    CertiliaSDK.initialize(
+      serverUrl: widget.serverUrl,
+      callbackUrl: widget.callbackUrl,
+      direct: widget.direct,
+      scopes: widget.scopes,
+      enableLogging: widget.enableLogging,
+    ).then((client) => _certilia = client, onError: (Object e) {
+      // A configuration error (e.g. direct mode without an https
+      // callbackUrl). Show it now; the login button retries initialize().
+      debugPrint('❌ [CertiliaAuthWidget] SDK initialization failed: $e');
+      if (!mounted) return;
+      setState(() => _errorMessage = e.toString());
+    });
     _checkStoredAuthentication();
   }
 
@@ -107,20 +134,19 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
     debugPrint('📊 [CertiliaAuthWidget] State changed to: $_authState');
 
     try {
-      debugPrint('📱 [CertiliaAuthWidget] Initializing SDK...');
-      final certilia = await CertiliaSDK.initialize(
-        serverUrl: widget.serverUrl,
-        scopes: widget.scopes,
-        enableLogging: widget.enableLogging,
-      );
-
-      if (!mounted) {
-        debugPrint('⚠️ [CertiliaAuthWidget] Widget not mounted after SDK init');
-        return;
+      // Call authenticate() before any await (see _certilia).
+      var certilia = _certilia;
+      if (certilia == null) {
+        certilia = await CertiliaSDK.initialize(
+          serverUrl: widget.serverUrl,
+          callbackUrl: widget.callbackUrl,
+        direct: widget.direct,
+          scopes: widget.scopes,
+          enableLogging: widget.enableLogging,
+        );
+        if (!mounted) return;
       }
-
       debugPrint('🔐 [CertiliaAuthWidget] Calling authenticate...');
-      // Authenticate and get user
       final user = await certilia.authenticate(context);
 
       debugPrint('✅ [CertiliaAuthWidget] Authentication returned! User: ${user.fullName}');
@@ -158,9 +184,11 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
       if (!e.message.toLowerCase().contains('cancel') &&
           !e.message.toLowerCase().contains('dismissed')) {
         setState(() {
+          // Show the SDK's reason (e.g. a blocked popup) so the failure can
+          // be diagnosed without a debugger.
           _errorMessage = _isEnglish
-            ? 'Authentication failed. Please try again.'
-            : 'Prijava neuspješna. Pokušajte ponovno.';
+            ? 'Authentication failed: ${e.message}'
+            : 'Prijava neuspješna: ${e.message}';
           _authState = AuthState.unauthenticated;
         });
       } else {
@@ -200,9 +228,11 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
         return;
       }
 
-      // Use the SDK instance we already have for consistency
+      // A new SDK instance; it loads the stored tokens itself.
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
+        callbackUrl: widget.callbackUrl,
+        direct: widget.direct,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
       );
@@ -242,6 +272,8 @@ class _CertiliaAuthWidgetState extends State<CertiliaAuthWidget> {
     try {
       final certilia = await CertiliaSDK.initialize(
         serverUrl: widget.serverUrl,
+        callbackUrl: widget.callbackUrl,
+        direct: widget.direct,
         scopes: widget.scopes,
         enableLogging: widget.enableLogging,
       );

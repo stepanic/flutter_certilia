@@ -1,9 +1,10 @@
 # Deploying `certilia-server`
 
-The Flutter SDK in this repo only works once `certilia-server` is
-deployed somewhere reachable. This document covers the recommended
-path (Coolify with docker-compose) plus alternatives and one
-non-option.
+In proxy mode, the default, the Flutter SDK needs `certilia-server`
+deployed where the app can reach it. (Direct mode needs no server; see
+the [README](README.md#direct-mode-no-server).) This document covers
+Coolify with docker-compose, which is the recommended setup, Google
+Cloud Run, and why Cloudflare Pages / Workers cannot run the server.
 
 ```mermaid
 flowchart LR
@@ -12,17 +13,18 @@ flowchart LR
     style B fill:#dff,stroke:#36c
 ```
 
-One deployed instance == one Certilia OAuth client. If you have
-several apps, deploy several instances (separate Coolify resources,
-separate `.env`).
+Each deployed instance has a default Certilia client and, in
+`CERTILIA_CLIENTS`, one more client for each callback URL the apps
+receive themselves (see [`certilia-server/README.md`](certilia-server/README.md)).
+For several apps, the simplest setup is one instance per app, with
+separate Coolify resources and separate `.env` files.
 
 ## Recommended: Coolify + docker-compose
 
 [Coolify](https://coolify.io/) is a self-hosted PaaS that runs on
-your own VPS. It gives you a git-based deploy flow, environment-
-variable UI, automatic Let's Encrypt TLS, and one-click stack
-duplication for the multi-app case. The certilia-server repo ships a
-docker-compose template that plugs straight in.
+your own VPS. It deploys from git, has a UI for environment variables,
+gets TLS certificates from Let's Encrypt, and can duplicate a stack for
+a second app. `certilia-server/docker-compose.yml` works in it as is.
 
 ### Prerequisites
 
@@ -53,19 +55,21 @@ docker-compose template that plugs straight in.
      comma-separated, no trailing slash
    - `CERTILIA_BASE_URL` = `https://idp.test.certilia.com` for the
      test environment or `https://idp.certilia.com` for production
+   - `CERTILIA_CLIENTS` (optional): the Certilia clients for callbacks
+     the app receives itself, such as a web callback page or an App Link
 
-3. **Attach the domain** in Coolify → it provisions TLS via Let's
-   Encrypt automatically.
+3. **Attach the domain** in Coolify. Coolify gets its TLS certificate
+   from Let's Encrypt.
 
-4. **Deploy** → Coolify builds the image from `certilia-server/Dockerfile`
-   and runs it. Health is `GET /api/health` on the container.
+4. **Deploy.** Coolify builds the image from `certilia-server/Dockerfile`
+   and runs it. The health check is `GET /api/health`.
 
 5. **Verify** from your machine:
    ```bash
    curl https://proxy.your-domain.example/api/health
    ```
 
-6. **Point Flutter app** at the new URL:
+6. **Point the Flutter app** at the new URL:
    ```bash
    flutter run -d chrome \
      --dart-define=CERTILIA_SERVER_URL=https://proxy.your-domain.example
@@ -84,7 +88,7 @@ Each app gets its own deployed instance:
 4. Attach a different subdomain.
 
 The Flutter app only ever needs to know its own `CERTILIA_SERVER_URL`
-— no other coupling.
+and nothing else about the deployment.
 
 ### Local docker-compose
 
@@ -101,18 +105,25 @@ Health check: `curl http://localhost:8080/api/health`.
 
 ## Alternative: Google Cloud Run
 
-There's already a [`deploy-cloud-run.sh`](certilia-server/deploy-cloud-run.sh)
-script. Cloud Run is managed, scales to zero, and bills only when a
-request lands. Tradeoff: cold starts (~1-2s), and managing env vars
-through `gcloud` is less ergonomic than a UI.
+[`deploy-cloud-run.sh`](certilia-server/deploy-cloud-run.sh) deploys
+the server to Cloud Run, which scales to zero and bills only for
+requests. The costs are cold starts of about 1-2 s and setting
+environment variables through `gcloud` instead of a UI.
 
-Quick start:
+`certilia-server` keeps login sessions in memory. A login fails with
+"Invalid or expired session" when `/api/auth/initialize` and
+`/api/auth/exchange` reach different instances, or when the instance
+scales to zero in between. The script allows up to 10 instances
+(`--max-instances 10`), so this can happen as soon as Cloud Run starts
+a second one.
+
+To deploy:
 ```bash
 cd certilia-server
 ./deploy-cloud-run.sh
 ```
 
-Use Cloud Run if you don't want to run a VPS at all.
+Cloud Run suits you if you do not want to run a VPS.
 
 ## Not supported: Cloudflare Pages / Workers
 
@@ -121,30 +132,29 @@ state. Cloudflare Pages serves static + Functions (Workers runtime),
 which does not run Node.js Express directly. Porting would require:
 
 - Rewriting the framework (Express → Hono or itty-router)
-- Replacing the in-memory session `Map` with Workers KV or Durable
-  Objects (eventual vs. strong consistency tradeoff)
+- Replacing the in-memory session `Map` with Durable Objects, or with
+  Workers KV, which is only eventually consistent, so a session written
+  at `/api/auth/initialize` may not yet be readable at
+  `/api/auth/exchange`
 - Replacing Node-only APIs (`crypto`, `fs`, parts of `http`) with
   Workers equivalents
 
-That's weeks of work for an edge-runtime / zero-cost-free-tier
-payoff. Unless that's specifically what you need, Coolify or Cloud
-Run will get you to production faster.
+That is weeks of work, and the gain is running on Cloudflare's edge
+and free tier.
 
 ## Security checklist before going live
 
 - [ ] `JWT_SECRET` and `SESSION_SECRET` are fresh random values
       (never the example placeholders). Each deploy has its own.
 - [ ] `CERTILIA_CLIENT_SECRET` is set via the Coolify UI, **not** in
-      a committed `.env` file. Repo's `.gitignore` covers `.env` —
+      a committed `.env` file. Repo's `.gitignore` covers `.env`;
       keep it that way.
 - [ ] `ALLOWED_ORIGINS` lists exactly the Flutter app origins you
       want. No wildcards.
-- [ ] HTTPS is enforced end-to-end (Certilia rejects HTTP redirect
-      URIs).
+- [ ] The proxy is reachable only over HTTPS. (The Certilia portal
+      accepts only https callback URLs.)
 - [ ] Rate limiting (`RATE_LIMIT_*`) is left enabled.
-- [ ] The committed `.env.example.production` file in this repo
-      currently contains placeholder-looking but suspiciously real
-      Certilia credentials from earlier development. Treat as
-      compromised: rotate the corresponding Certilia OAuth
-      application's secret in the developer dashboard before going
-      live, even if those values were never your production ones.
+- [ ] `.env.example.production` in this repo contains a Certilia
+      client ID and secret that look real. Treat them as leaked: if
+      that client is yours, rotate its secret in the Certilia
+      developer dashboard.

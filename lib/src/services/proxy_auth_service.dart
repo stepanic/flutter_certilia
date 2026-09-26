@@ -7,14 +7,15 @@ import 'package:http/http.dart' as http;
 import '../exceptions/certilia_exception.dart';
 import '../models/certilia_extended_info.dart';
 import '../models/certilia_user.dart';
+import 'certilia_auth_backend.dart';
 import 'certilia_logger.dart';
 
 /// HTTP client for the certilia-server proxy.
 ///
-/// Owns every request the SDK makes against the proxy: OAuth init, polling
-/// session lifecycle (web), code-for-token exchange (with retry), refresh,
-/// user info, and extended info. Stateless — callers manage tokens.
-class ProxyAuthService {
+/// Makes every request the SDK sends to the proxy: starting the login,
+/// exchanging the code (with retries), refreshing, and fetching the basic
+/// and extended profile. It keeps no tokens; callers store them.
+class ProxyAuthService implements CertiliaAuthBackend {
   final String serverUrl;
   final http.Client _httpClient;
   final CertiliaLogger _logger;
@@ -24,10 +25,11 @@ class ProxyAuthService {
   static const Duration _refreshTimeout = Duration(seconds: 10);
   static const int _exchangeRetries = 3;
 
-  /// Custom headers only travel on non-web platforms. On web, custom headers
-  /// trigger CORS preflight; the proxy server's CORS config only whitelists
-  /// `Content-Type` and `Authorization`, so anything extra (e.g. the
-  /// ngrok-skip warning header used by in-app WebViews) would block requests.
+  /// Extra headers are sent only outside the web. On web, a custom header
+  /// makes the browser send a CORS preflight, and certilia-server allows only
+  /// `Content-Type` and `Authorization`, so the request would be blocked.
+  /// Elsewhere `ngrok-skip-browser-warning` keeps an ngrok tunnel from
+  /// answering with its warning page.
   static final Map<String, String> _baseHeaders = kIsWeb
       ? const <String, String>{}
       : const <String, String>{'ngrok-skip-browser-warning': 'true'};
@@ -39,11 +41,24 @@ class ProxyAuthService {
   })  : _httpClient = httpClient ?? http.Client(),
         _logger = logger;
 
-  /// GET /api/auth/initialize — returns `authorization_url`, `state`, `session_id`.
-  Future<Map<String, dynamic>> initialize() async {
+  /// The callback of the proxy at [serverUrl], used by the mobile WebView
+  /// flow, which watches for this URL.
+  static String callbackUrlFor(String serverUrl) =>
+      '$serverUrl/api/auth/callback';
+
+  /// [callbackUrlFor] this proxy.
+  String get proxyCallbackUrl => callbackUrlFor(serverUrl);
+
+  /// GET /api/auth/initialize: returns `authorization_url`, `state`, `session_id`.
+  ///
+  /// [redirectUri] is where Certilia sends the browser after login. It
+  /// defaults to [proxyCallbackUrl]. The proxy picks the Certilia client
+  /// registered for this URI.
+  @override
+  Future<Map<String, dynamic>> initialize({String? redirectUri}) async {
     final url = '$serverUrl/api/auth/initialize'
         '?response_type=code'
-        '&redirect_uri=$serverUrl/api/auth/callback';
+        '&redirect_uri=${Uri.encodeQueryComponent(redirectUri ?? proxyCallbackUrl)}';
     _logger.log('Initializing OAuth flow: $url');
 
     final response = await _httpClient
@@ -60,51 +75,9 @@ class ProxyAuthService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  /// POST /api/auth/polling/start — web popup flow only.
-  Future<Map<String, dynamic>> startPollingSession({
-    required String state,
-    required String sessionId,
-  }) async {
-    final response = await _httpClient.post(
-      Uri.parse('$serverUrl/api/auth/polling/start'),
-      headers: {
-        ..._baseHeaders,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'state': state, 'session_id': sessionId}),
-    );
-
-    if (response.statusCode != 200) {
-      throw CertiliaNetworkException(
-        message: 'Failed to start polling session',
-        statusCode: response.statusCode,
-        details: response.body,
-      );
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
-  }
-
-  /// GET /api/auth/polling/:id/status — web popup flow only.
-  /// Returns the raw response shape (`status`, optional `result`, optional `error`).
-  Future<Map<String, dynamic>?> pollStatus(String pollingId) async {
-    final response = await _httpClient.get(
-      Uri.parse('$serverUrl/api/auth/polling/$pollingId/status'),
-      headers: _baseHeaders,
-    );
-    if (response.statusCode == 404) {
-      return null;
-    }
-    if (response.statusCode != 200) {
-      throw CertiliaNetworkException(
-        message: 'Polling status request failed',
-        statusCode: response.statusCode,
-        details: response.body,
-      );
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
-  }
-
-  /// POST /api/auth/exchange — code → tokens. Retries on transient failure.
+  /// POST /api/auth/exchange: exchanges the code for tokens. Retries after a
+  /// timeout or connection error.
+  @override
   Future<Map<String, dynamic>> exchange({
     required String code,
     required String state,
@@ -140,7 +113,8 @@ class ProxyAuthService {
         }
         return jsonDecode(response.body) as Map<String, dynamic>;
       } on CertiliaNetworkException catch (e) {
-        // Non-200 responses are terminal — don't retry the server's "no".
+        // A non-200 answer from the proxy is final; only a timeout (408) is
+        // retried.
         if (e.statusCode != 408) rethrow;
         lastError = e;
       } catch (e) {
@@ -159,14 +133,16 @@ class ProxyAuthService {
         );
   }
 
-  /// POST /api/auth/refresh — returns refreshed token bundle.
+  /// POST /api/auth/refresh: returns refreshed token bundle.
   ///
-  /// Both tokens travel in the JSON body. Earlier versions of this SDK put
-  /// the access token in the Authorization header; the server still accepts
-  /// that for backward compatibility but new code should use the body path.
+  /// Both tokens are sent in the JSON body. The server also accepts the
+  /// access token in the Authorization header, which this SDK does not use.
+  /// [idToken] is not sent: the proxy keeps Certilia's tokens itself.
+  @override
   Future<Map<String, dynamic>> refresh({
     required String accessToken,
     required String refreshToken,
+    String? idToken,
   }) async {
     final response = await _httpClient
         .post(
@@ -192,8 +168,10 @@ class ProxyAuthService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  /// GET /api/auth/user — basic profile. Throws on non-200.
-  Future<CertiliaUser> fetchUserInfo(String accessToken) async {
+  /// GET /api/auth/user: basic profile. Throws on non-200.
+  @override
+  Future<CertiliaUser> fetchUserInfo(String accessToken,
+      {String? idToken}) async {
     final response = await _httpClient.get(
       Uri.parse('$serverUrl/api/auth/user'),
       headers: {
@@ -212,11 +190,13 @@ class ProxyAuthService {
     return CertiliaUser.fromJson(json['user'] as Map<String, dynamic>);
   }
 
-  /// GET /api/user/extended-info — full profile.
+  /// GET /api/user/extended-info: full profile.
   ///
   /// Returns null on 401/502 to let callers decide whether to refresh the
   /// token and retry. Throws on other non-200 statuses.
-  Future<CertiliaExtendedInfo?> fetchExtendedInfo(String accessToken) async {
+  @override
+  Future<CertiliaExtendedInfo?> fetchExtendedInfo(String accessToken,
+      {String? idToken}) async {
     final response = await _httpClient.get(
       Uri.parse('$serverUrl/api/user/extended-info'),
       headers: {
@@ -241,6 +221,7 @@ class ProxyAuthService {
     );
   }
 
+  @override
   void close() => _httpClient.close();
 
   CertiliaNetworkException _timeout(String op) => CertiliaNetworkException(
