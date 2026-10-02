@@ -68,6 +68,11 @@ const limiter = rateLimit({
   legacyHeaders: false,
   // Skip validation warnings - we know we're behind ngrok proxy
   validate: false,
+  // Polling status is hit every few seconds while the user signs in on the IdP;
+  // counting it lets one slow eID login exhaust the per-IP budget (and with it
+  // everyone behind the same mobile-carrier NAT). The polling_id is unguessable
+  // and the lookup is an in-memory read, so it stays outside the limiter.
+  skip: (req) => req.method === 'GET' && /^\/auth\/polling\/[^/]+\/status$/.test(req.path),
 });
 
 app.use('/api', limiter);
